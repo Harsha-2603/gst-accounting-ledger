@@ -173,6 +173,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  window.appNavigate = function(route) {
+    window.location.hash = '#' + route;
+    navigate(route);
+  };
+
   window.addEventListener('hashchange', () => {
     navigate(window.location.hash.slice(1));
   });
@@ -444,35 +449,98 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // 6. Payments
-  async function loadPayments() {
+  // 6. Payments Remittances & AR Relief
+  async function loadPayments(customFilters) {
     const tbody = document.getElementById('paymentsTableBody');
-    tbody.innerHTML = ui.renderSkeleton(4, 6);
+    tbody.innerHTML = ui.renderSkeleton(4, 8);
+
+    const searchInput = document.getElementById('paySearchInput');
+    const fromInput = document.getElementById('payDateFrom');
+    const toInput = document.getElementById('payDateTo');
+
+    const filters = customFilters || {
+      search: searchInput ? searchInput.value.trim().toLowerCase() : '',
+      fromDate: fromInput ? fromInput.value : '',
+      toDate: toInput ? toInput.value : ''
+    };
 
     try {
       const payments = await api.getPayments();
       state.payments = payments;
       tbody.innerHTML = '';
 
-      if (payments.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6">${ui.renderEmptyState({ icon: '💳', title: 'No payment remittances', description: 'Record payments from customers to relieve outstanding receivables.', actionHtml: '<button class="btn btn-primary btn-sm" onclick="document.getElementById(\'modalPayment\').classList.add(\'active\')">+ Record Payment</button>' })}</td></tr>`;
+      // Compute Stats Strip
+      let totalRemittance = 0;
+      let bankPortion = 0;
+      let cashPortion = 0;
+
+      payments.forEach(p => {
+        const amt = p.amount || 0;
+        totalRemittance += amt;
+        const accName = (p.depositAccountName || '').toLowerCase();
+        if (accName.includes('bank') || p.depositAccountId === 'acc_bank' || (p.depositAccountName && p.depositAccountName.includes('1010'))) {
+          bankPortion += amt;
+        } else {
+          cashPortion += amt;
+        }
+      });
+
+      const statCount = document.getElementById('payStatCount');
+      const statTotal = document.getElementById('payStatTotal');
+      const statBank = document.getElementById('payStatBank');
+      const statCash = document.getElementById('payStatCash');
+
+      if (statCount) statCount.textContent = payments.length;
+      if (statTotal) statTotal.textContent = ui.formatINR(totalRemittance);
+      if (statBank) statBank.textContent = ui.formatINR(bankPortion);
+      if (statCash) statCash.textContent = ui.formatINR(cashPortion);
+
+      // Filter client-side
+      let filtered = payments;
+      if (filters.search) {
+        filtered = filtered.filter(p => 
+          (p.paymentNumber && p.paymentNumber.toLowerCase().includes(filters.search)) ||
+          (p.customerName && p.customerName.toLowerCase().includes(filters.search)) ||
+          (p.referenceNumber && p.referenceNumber.toLowerCase().includes(filters.search))
+        );
+      }
+      if (filters.fromDate) {
+        filtered = filtered.filter(p => p.paymentDate >= filters.fromDate);
+      }
+      if (filters.toDate) {
+        filtered = filtered.filter(p => p.paymentDate <= filters.toDate);
+      }
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8">${ui.renderEmptyState({ 
+          icon: '💳', 
+          title: 'No payment remittances found', 
+          description: filters.search || filters.fromDate || filters.toDate 
+            ? 'No remittances match the specified search or date filters.' 
+            : 'Record customer payments to relieve outstanding receivables and deposit funds.', 
+          actionHtml: '<button class="btn btn-primary btn-sm" onclick="window.appOpenRecordPayment()">+ Record Payment</button>' 
+        })}</td></tr>`;
         return;
       }
 
-      payments.forEach(p => {
+      filtered.forEach(p => {
         tbody.innerHTML += `
           <tr>
             <td><strong>${p.paymentNumber}</strong></td>
-            <td>${p.customerName}</td>
+            <td><strong>${p.customerName}</strong></td>
             <td>${ui.formatDate(p.paymentDate)}</td>
             <td><span class="badge badge-state">${p.depositAccountName}</span></td>
-            <td><code>${p.referenceNumber || 'N/A'}</code></td>
+            <td><code>${p.referenceNumber || 'Direct Deposit'}</code></td>
             <td class="num" style="color:var(--emerald-500); font-weight:700;">${ui.formatINR(p.amount)}</td>
+            <td>
+              ${p.journalEntryId ? `<span class="badge badge-delivered" style="cursor:pointer;" onclick="window.appViewTransactionDetails && window.appViewTransactionDetails('${p.journalEntryId}')" title="Click to view GL Voucher">${p.journalEntryId}</span>` : '<span class="badge badge-draft">Direct</span>'}
+            </td>
+            <td><span class="badge badge-delivered">POSTED</span></td>
           </tr>
         `;
       });
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="6">${ui.renderErrorState(err.message, 'loadPayments')}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8">${ui.renderErrorState(err.message, 'loadPayments')}</td></tr>`;
     }
   }
 
@@ -483,44 +551,76 @@ document.addEventListener('DOMContentLoaded', () => {
       state.trialBalance = tb;
       updateEquilibriumHeader(tb);
 
-      const banner = document.getElementById('tbEquilibriumBanner');
-      if (tb.isBalanced) {
-        banner.style.background = 'var(--emerald-subtle)';
-        banner.style.borderColor = 'rgba(16, 185, 129, 0.4)';
-        banner.style.color = 'var(--emerald-500)';
-        banner.innerHTML = `
-          <div style="font-size: 15px; font-weight: 700;">⚖️ GENERAL LEDGER IN PERFECT EQUILIBRIUM</div>
-          <div style="font-size: 12px; margin-top: 4px; color:#a7f3d0;">
-            Total Debits: <strong>${ui.formatINR(tb.totalDebit)}</strong> equal Total Credits: <strong>${ui.formatINR(tb.totalCredit)}</strong> (Difference: ${tb.difference.toFixed(4)}). Zero-trust transaction balancing certified.
-          </div>
-        `;
-      } else {
-        banner.style.background = 'var(--rose-subtle)';
-        banner.style.borderColor = 'rgba(244, 63, 94, 0.4)';
-        banner.style.color = 'var(--rose-500)';
-        banner.innerHTML = `
-          <div style="font-size: 15px; font-weight: 700;">⚠️ DISCREPANCY DETECTED</div>
-          <div style="font-size: 12px; margin-top: 4px; color:#fecdd3;">Difference: ₹${tb.difference.toFixed(4)}</div>
-        `;
+      // Top-level summary cards (Authoritative Backend Values)
+      const cardDebit = document.getElementById('tbCardDebit');
+      const cardCredit = document.getElementById('tbCardCredit');
+      const cardDiff = document.getElementById('tbCardDiff');
+      const cardStatus = document.getElementById('tbCardStatus');
+
+      if (cardDebit) cardDebit.textContent = ui.formatINR(tb.totalDebit);
+      if (cardCredit) cardCredit.textContent = ui.formatINR(tb.totalCredit);
+      if (cardDiff) cardDiff.textContent = ui.formatINR(tb.difference);
+      if (cardStatus) {
+        cardStatus.innerHTML = tb.isBalanced
+          ? `<span class="badge badge-delivered" style="font-size:13px; padding:4px 10px;">✓ BALANCED (Dr == Cr)</span>`
+          : `<span class="badge badge-reversal" style="font-size:13px; padding:4px 10px; background:rgba(244,63,94,0.2); color:#f43f5e;">⚠️ NOT BALANCED</span>`;
       }
 
+      // Prominent Equilibrium Banner
+      const banner = document.getElementById('tbEquilibriumBanner');
+      if (banner) {
+        if (tb.isBalanced) {
+          banner.className = 'tb-banner-balanced';
+          banner.innerHTML = `
+            <div style="font-size: 15px; font-weight: 700; display:flex; align-items:center; gap:8px;">
+              <span>🛡️</span> <span>GENERAL LEDGER IN PERFECT STATUTORY EQUILIBRIUM</span>
+            </div>
+            <div style="font-size: 12.5px; margin-top: 6px; color:#a7f3d0;">
+              Total Debits of <strong>${ui.formatINR(tb.totalDebit)}</strong> exactly equal Total Credits of <strong>${ui.formatINR(tb.totalCredit)}</strong> (Variance: ${tb.difference.toFixed(4)}). Zero-trust transaction balancing certified for all double-entry accounts.
+            </div>
+          `;
+        } else {
+          banner.className = 'tb-banner-unbalanced';
+          banner.innerHTML = `
+            <div style="font-size: 15px; font-weight: 700; display:flex; align-items:center; gap:8px;">
+              <span>⚠️</span> <span>MATHEMATICAL DISCREPANCY DETECTED IN GENERAL LEDGER</span>
+            </div>
+            <div style="font-size: 12.5px; margin-top: 6px; color:#fecdd3;">
+              Debits: ${ui.formatINR(tb.totalDebit)} vs Credits: ${ui.formatINR(tb.totalCredit)}. Discrepancy of <strong>${ui.formatINR(tb.difference)}</strong> detected.
+            </div>
+          `;
+        }
+      }
+
+      // Accounts Table
       const tbody = document.getElementById('trialBalanceTableBody');
       tbody.innerHTML = '';
       tb.accounts.forEach(acc => {
         tbody.innerHTML += `
           <tr>
-            <td><span class="badge badge-state">${acc.accountCode}</span></td>
+            <td><code>${acc.accountCode}</code></td>
             <td><strong>${acc.accountName}</strong></td>
-            <td><span style="font-size: 11px; text-transform:uppercase; color:var(--text-subtle);">${acc.type}</span></td>
+            <td><span class="badge badge-state" style="font-size:11px;">${acc.type}</span></td>
+            <td><small style="color:var(--text-subtle);">${acc.normalBalance}</small></td>
             <td class="num">${acc.debit > 0 ? ui.formatINR(acc.debit) : '-'}</td>
             <td class="num">${acc.credit > 0 ? ui.formatINR(acc.credit) : '-'}</td>
-            <td class="num" style="font-weight:600;">${ui.formatINR(acc.balance)}</td>
+            <td class="num" style="font-weight:700; color: ${acc.balance >= 0 ? 'var(--text-main)' : 'var(--rose-500)'};">${ui.formatINR(acc.balance)}</td>
           </tr>
         `;
       });
 
-      document.getElementById('tbTotalDebit').textContent = ui.formatINR(tb.totalDebit);
-      document.getElementById('tbTotalCredit').textContent = ui.formatINR(tb.totalCredit);
+      // Table Footer Totals
+      const totDebitEl = document.getElementById('tbTotalDebit');
+      const totCreditEl = document.getElementById('tbTotalCredit');
+      const totStatusEl = document.getElementById('tbTotalStatus');
+
+      if (totDebitEl) totDebitEl.textContent = ui.formatINR(tb.totalDebit);
+      if (totCreditEl) totCreditEl.textContent = ui.formatINR(tb.totalCredit);
+      if (totStatusEl) {
+        totStatusEl.innerHTML = tb.isBalanced
+          ? `<span style="color:var(--emerald-500);">BALANCED (Diff: 0.00)</span>`
+          : `<span style="color:var(--rose-500);">UNBALANCED (Diff: ${tb.difference.toFixed(2)})</span>`;
+      }
     } catch (err) {
       console.error('Trial Balance error:', err);
     }
@@ -550,59 +650,136 @@ document.addEventListener('DOMContentLoaded', () => {
     ui.showToast(toDate ? `Trial Balance filtered as of ${toDate}` : 'Trial Balance refreshed', 'info');
   });
 
-  // 8. GSTR-1
+  document.getElementById('btnResetTB')?.addEventListener('click', () => {
+    const dateInp = document.getElementById('tbDateFilter');
+    if (dateInp) dateInp.value = '';
+    loadTrialBalance();
+    ui.showToast('Trial Balance reset to current date.', 'info');
+  });
+
+  // 8. GSTR-1 Tax Return
   async function loadGSTR1(fromDate, toDate) {
     try {
       const gstr1 = await api.getGSTR1(fromDate, toDate);
       state.gstr1 = gstr1;
 
-      // Section 4A B2B
+      const b2bInvoices = gstr1.b2bSummary || [];
+      const hsnSummary = gstr1.hsnSummary || [];
+
+      // Calculate Top Summary Metrics
+      let totalTaxable = 0;
+      let totalCGST = 0;
+      let totalSGST = 0;
+      let totalIGST = 0;
+
+      b2bInvoices.forEach(row => {
+        totalTaxable += (row.taxableValue || 0);
+        totalCGST += (row.cgst || 0);
+        totalSGST += (row.sgst || 0);
+        totalIGST += (row.igst || 0);
+      });
+
+      const grandTotalVal = totalTaxable + totalCGST + totalSGST + totalIGST;
+
+      const statTaxable = document.getElementById('gstr1StatTaxable');
+      const statCGST = document.getElementById('gstr1StatCGST');
+      const statSGST = document.getElementById('gstr1StatSGST');
+      const statIGST = document.getElementById('gstr1StatIGST');
+      const statTotal = document.getElementById('gstr1StatTotal');
+
+      if (statTaxable) statTaxable.textContent = ui.formatINR(totalTaxable);
+      if (statCGST) statCGST.textContent = ui.formatINR(totalCGST);
+      if (statSGST) statSGST.textContent = ui.formatINR(totalSGST);
+      if (statIGST) statIGST.textContent = ui.formatINR(totalIGST);
+      if (statTotal) statTotal.textContent = ui.formatINR(grandTotalVal);
+
+      // Filter B2B Summary
+      const searchInput = document.getElementById('gstr1SearchInput');
+      const searchVal = searchInput ? searchInput.value.trim().toLowerCase() : '';
+      const typeFilter = document.getElementById('gstr1SupplyTypeFilter')?.value || 'ALL';
+
+      let filteredB2B = b2bInvoices;
+      if (searchVal) {
+        filteredB2B = filteredB2B.filter(r => 
+          (r.customerGstin && r.customerGstin.toLowerCase().includes(searchVal)) ||
+          (r.customerName && r.customerName.toLowerCase().includes(searchVal)) ||
+          (r.invoiceNumber && r.invoiceNumber.toLowerCase().includes(searchVal))
+        );
+      }
+
+      if (typeFilter === 'INTRA') {
+        filteredB2B = filteredB2B.filter(r => (r.placeOfSupply && r.placeOfSupply.startsWith('27')) || (r.cgst > 0));
+      } else if (typeFilter === 'INTER') {
+        filteredB2B = filteredB2B.filter(r => (!r.placeOfSupply || !r.placeOfSupply.startsWith('27')) && (r.igst > 0));
+      }
+
+      // Populate Section 4A B2B
       const b2bBody = document.getElementById('gstr1B2BBody');
       b2bBody.innerHTML = '';
-      if (!gstr1.b2bSummary || gstr1.b2bSummary.length === 0) {
-        b2bBody.innerHTML = `<tr><td colspan="10">${ui.renderEmptyState({ icon: '📑', title: 'No delivered B2B invoices', description: 'Deliver sales invoices to populate GSTR-1 Section 4A.' })}</td></tr>`;
+      if (filteredB2B.length === 0) {
+        b2bBody.innerHTML = `<tr><td colspan="12">${ui.renderEmptyState({ 
+          icon: '📑', 
+          title: 'No delivered B2B invoices found', 
+          description: searchVal || typeFilter !== 'ALL' 
+            ? 'No invoices match the applied GSTR-1 return filter.' 
+            : 'Deliver sales invoices to populate GSTR-1 Section 4A.' 
+        })}</td></tr>`;
       } else {
-        gstr1.b2bSummary.forEach(row => {
+        filteredB2B.forEach(row => {
+          const isIntra = (row.placeOfSupply && row.placeOfSupply.startsWith('27')) || row.cgst > 0;
+          const invoiceTotal = (row.taxableValue || 0) + (row.cgst || 0) + (row.sgst || 0) + (row.igst || 0);
+
           b2bBody.innerHTML += `
             <tr>
-              <td><code>${row.customerGstin}</code></td>
-              <td>${row.customerName}</td>
-              <td><strong>${row.invoiceNumber}</strong></td>
+              <td><code>${row.customerGstin || 'URP'}</code></td>
+              <td><strong>${row.customerName}</strong></td>
+              <td>
+                <a href="javascript:void(0)" onclick="window.appViewInvoiceDetails && window.appViewInvoiceDetails('${row.invoiceNumber}')" style="font-weight:700; color:var(--primary-400); text-decoration:none;">
+                  ${row.invoiceNumber}
+                </a>
+              </td>
               <td>${ui.formatDate(row.invoiceDate)}</td>
               <td><span class="badge badge-state">${row.placeOfSupply}</span></td>
+              <td>
+                <span class="badge ${isIntra ? 'badge-delivered' : 'badge-reversal'}">
+                  ${isIntra ? 'INTRA-STATE' : 'INTER-STATE'}
+                </span>
+              </td>
               <td class="num">${ui.formatINR(row.taxableValue)}</td>
               <td class="num">${row.rate}%</td>
-              <td class="num">${ui.formatINR(row.cgst)}</td>
-              <td class="num">${ui.formatINR(row.sgst)}</td>
-              <td class="num">${ui.formatINR(row.igst)}</td>
+              <td class="num" style="color:var(--blue-500);">${row.cgst > 0 ? ui.formatINR(row.cgst) : '-'}</td>
+              <td class="num" style="color:var(--blue-500);">${row.sgst > 0 ? ui.formatINR(row.sgst) : '-'}</td>
+              <td class="num" style="color:var(--purple-500);">${row.igst > 0 ? ui.formatINR(row.igst) : '-'}</td>
+              <td class="num"><strong>${ui.formatINR(invoiceTotal)}</strong></td>
             </tr>
           `;
         });
       }
 
-      // Section 12 HSN
+      // Populate Section 12 HSN
       const hsnBody = document.getElementById('gstr1HSNBody');
       hsnBody.innerHTML = '';
-      if (!gstr1.hsnSummary || gstr1.hsnSummary.length === 0) {
-        hsnBody.innerHTML = `<tr><td colspan="8">${ui.renderEmptyState({ icon: '📦', title: 'No HSN records', description: 'Outward supplies with statutory HSN codes will appear here.' })}</td></tr>`;
+      if (hsnSummary.length === 0) {
+        hsnBody.innerHTML = `<tr><td colspan="9">${ui.renderEmptyState({ icon: '📦', title: 'No HSN records', description: 'Outward supplies with statutory HSN codes will appear here.' })}</td></tr>`;
       } else {
-        gstr1.hsnSummary.forEach(h => {
+        hsnSummary.forEach(h => {
           hsnBody.innerHTML += `
             <tr>
               <td><code>${h.hsnCode}</code></td>
-              <td>${h.description}</td>
-              <td>${h.uqc}</td>
+              <td><strong>${h.description}</strong></td>
+              <td>${h.uqc || 'NOS'}</td>
               <td class="num">${h.totalQuantity}</td>
               <td class="num">${ui.formatINR(h.taxableValue)}</td>
-              <td class="num">${ui.formatINR(h.cgst)}</td>
-              <td class="num">${ui.formatINR(h.sgst)}</td>
-              <td class="num">${ui.formatINR(h.igst)}</td>
+              <td class="num" style="color:var(--blue-500);">${h.cgst > 0 ? ui.formatINR(h.cgst) : '-'}</td>
+              <td class="num" style="color:var(--blue-500);">${h.sgst > 0 ? ui.formatINR(h.sgst) : '-'}</td>
+              <td class="num" style="color:var(--purple-500);">${h.igst > 0 ? ui.formatINR(h.igst) : '-'}</td>
+              <td class="num"><strong>${ui.formatINR(h.totalValue)}</strong></td>
             </tr>
           `;
         });
       }
     } catch (err) {
-      document.getElementById('gstr1B2BBody').innerHTML = `<tr><td colspan="10">${ui.renderErrorState(err.message, 'loadGSTR1')}</td></tr>`;
+      document.getElementById('gstr1B2BBody').innerHTML = `<tr><td colspan="12">${ui.renderErrorState(err.message, 'loadGSTR1')}</td></tr>`;
     }
   }
 
@@ -613,39 +790,203 @@ document.addEventListener('DOMContentLoaded', () => {
     ui.showToast('GSTR-1 report updated for selected period.', 'info');
   });
 
-  // 9. Audit Journal Vouchers
+  document.getElementById('btnResetGSTR1')?.addEventListener('click', () => {
+    const f = document.getElementById('gstr1FromDate');
+    const t = document.getElementById('gstr1ToDate');
+    const s = document.getElementById('gstr1SearchInput');
+    const st = document.getElementById('gstr1SupplyTypeFilter');
+    if (f) f.value = '';
+    if (t) t.value = '';
+    if (s) s.value = '';
+    if (st) st.value = 'ALL';
+    loadGSTR1();
+    ui.showToast('GSTR-1 report filters reset.', 'info');
+  });
+
+  // 9. Audit Journal Vouchers & Explorer
+  let groupedVouchersCache = [];
+
   async function loadTransactions() {
     const tbody = document.getElementById('journalTableBody');
-    tbody.innerHTML = ui.renderSkeleton(5, 7);
+    tbody.innerHTML = ui.renderSkeleton(5, 9);
 
     try {
       const data = await api.getTransactions();
-      state.transactions = data.transactions || [];
+      const rawLines = data.transactions || [];
+      state.transactions = rawLines;
       tbody.innerHTML = '';
 
-      if (state.transactions.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7">${ui.renderEmptyState({ icon: '📜', title: 'No journal entries posted', description: 'Transactions appear here as balanced double-entry vouchers upon document delivery.' })}</td></tr>`;
+      if (rawLines.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9">${ui.renderEmptyState({ icon: '📜', title: 'No journal entries posted', description: 'Transactions appear here as balanced double-entry vouchers upon document delivery.' })}</td></tr>`;
         return;
       }
 
-      state.transactions.forEach(jl => {
-        const isReversal = jl.entryType === 'REVERSAL' || (jl.narration && jl.narration.toLowerCase().includes('reversal'));
+      // Group lines by entryNumber to form complete Vouchers
+      const voucherMap = new Map();
+      rawLines.forEach(line => {
+        const num = line.entryNumber;
+        if (!voucherMap.has(num)) {
+          voucherMap.set(num, {
+            voucherNumber: num,
+            date: line.date,
+            entryType: line.entryType,
+            referenceType: line.referenceType,
+            referenceId: line.referenceId,
+            narration: line.description || '',
+            totalDebit: 0,
+            totalCredit: 0,
+            lines: []
+          });
+        }
+        const v = voucherMap.get(num);
+        v.lines.push(line);
+        v.totalDebit += (line.debit || 0);
+        v.totalCredit += (line.credit || 0);
+        if (!v.narration && line.description) {
+          v.narration = line.description;
+        }
+      });
+
+      groupedVouchersCache = Array.from(voucherMap.values());
+
+      // Filter Vouchers
+      const searchVal = document.getElementById('journalSearchInput')?.value.trim().toLowerCase() || '';
+      const typeFilter = document.getElementById('journalTypeFilter')?.value || 'ALL';
+
+      let filteredVouchers = groupedVouchersCache;
+      if (searchVal) {
+        filteredVouchers = filteredVouchers.filter(v => 
+          v.voucherNumber.toLowerCase().includes(searchVal) ||
+          v.narration.toLowerCase().includes(searchVal) ||
+          (v.referenceId && v.referenceId.toLowerCase().includes(searchVal)) ||
+          v.lines.some(l => l.accountCode.toLowerCase().includes(searchVal) || l.accountName.toLowerCase().includes(searchVal))
+        );
+      }
+
+      if (typeFilter !== 'ALL') {
+        filteredVouchers = filteredVouchers.filter(v => v.entryType === typeFilter);
+      }
+
+      if (filteredVouchers.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9">${ui.renderEmptyState({ icon: '🔍', title: 'No vouchers match filters', description: 'Try adjusting your search query or transaction type filter.' })}</td></tr>`;
+        return;
+      }
+
+      filteredVouchers.forEach(v => {
+        const isReversal = v.entryType === 'REVERSAL';
+        const isBalanced = Math.abs(v.totalDebit - v.totalCredit) < 0.0001;
+
+        let linkedDocHtml = '-';
+        if (v.referenceType === 'Invoice' && v.referenceId) {
+          linkedDocHtml = `<a href="javascript:void(0)" onclick="window.appViewInvoiceDetails && window.appViewInvoiceDetails('${v.referenceId}')" style="color:var(--primary-400); text-decoration:none; font-weight:600;">Invoice ${v.referenceId}</a>`;
+        } else if (v.referenceType === 'Payment' && v.referenceId) {
+          linkedDocHtml = `<span>Payment ${v.referenceId}</span>`;
+        } else if (v.referenceType) {
+          linkedDocHtml = `<span>${v.referenceType} (${v.referenceId || ''})</span>`;
+        }
+
         tbody.innerHTML += `
-          <tr style="${isReversal ? 'background: rgba(168, 85, 247, 0.05);' : ''}">
-            <td><strong>${jl.entryNumber}</strong></td>
-            <td>${ui.formatDate(jl.date)}</td>
-            <td><span class="badge ${isReversal ? 'badge-reversal' : 'badge-state'}">${jl.entryType || 'POSTING'}</span></td>
-            <td><code>${jl.accountCode}</code> ${jl.accountName}</td>
-            <td style="font-size: 12px; color: var(--text-subtle);">${jl.narration || '-'}</td>
-            <td class="num">${jl.debit > 0 ? ui.formatINR(jl.debit) : '-'}</td>
-            <td class="num">${jl.credit > 0 ? ui.formatINR(jl.credit) : '-'}</td>
+          <tr class="${isReversal ? 'voucher-highlight-reversal' : ''}">
+            <td>
+              <a href="javascript:void(0)" onclick="window.appViewTransactionDetails('${v.voucherNumber}')" style="font-weight:700; color:var(--primary-400); text-decoration:none;" title="Click to open voucher">
+                ${v.voucherNumber}
+              </a>
+            </td>
+            <td>${ui.formatDate(v.date)}</td>
+            <td>
+              <span class="badge ${isReversal ? 'badge-reversal' : 'badge-state'}">
+                ${v.entryType}
+              </span>
+            </td>
+            <td>${linkedDocHtml}</td>
+            <td style="font-size: 12px; color: var(--text-subtle); max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${v.narration || ''}">
+              ${v.narration || 'General Ledger Entry'}
+            </td>
+            <td class="num">${ui.formatINR(v.totalDebit)}</td>
+            <td class="num">${ui.formatINR(v.totalCredit)}</td>
+            <td>
+              ${isBalanced 
+                ? `<span class="voucher-balanced-tag">✓ BALANCED</span>` 
+                : `<span class="badge badge-reversal" style="background:rgba(244,63,94,0.2); color:#f43f5e;">UNBALANCED</span>`}
+            </td>
+            <td>
+              <button class="btn btn-secondary btn-sm" onclick="window.appViewTransactionDetails('${v.voucherNumber}')" title="View journal lines">View</button>
+            </td>
           </tr>
         `;
       });
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="7">${ui.renderErrorState(err.message, 'loadTransactions')}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9">${ui.renderErrorState(err.message, 'loadTransactions')}</td></tr>`;
     }
   }
+
+  // Open Transaction Detail Modal
+  window.appViewTransactionDetails = function(voucherNumber) {
+    const voucher = groupedVouchersCache.find(v => v.voucherNumber === voucherNumber || v.voucherNumber === `JV-${voucherNumber}`);
+    if (!voucher) {
+      ui.showToast(`Voucher '${voucherNumber}' not found.`, 'error');
+      return;
+    }
+
+    document.getElementById('txDetVoucherNum').textContent = voucher.voucherNumber;
+    document.getElementById('txDetDate').textContent = `Posting Date: ${ui.formatDate(voucher.date)}`;
+    
+    const typeBadge = document.getElementById('txDetTypeBadge');
+    if (typeBadge) {
+      typeBadge.className = voucher.entryType === 'REVERSAL' ? 'badge badge-reversal' : 'badge badge-state';
+      typeBadge.textContent = voucher.entryType;
+    }
+
+    const reversalBanner = document.getElementById('txDetReversalBanner');
+    if (reversalBanner) {
+      reversalBanner.style.display = voucher.entryType === 'REVERSAL' ? 'block' : 'none';
+    }
+
+    document.getElementById('txDetLinkedDoc').textContent = voucher.referenceType 
+      ? `${voucher.referenceType}: ${voucher.referenceId || 'N/A'}`
+      : 'General Accounting Voucher';
+
+    document.getElementById('txDetNarration').textContent = voucher.narration || 'None provided';
+
+    const linesBody = document.getElementById('txDetLinesBody');
+    linesBody.innerHTML = '';
+    voucher.lines.forEach(l => {
+      linesBody.innerHTML += `
+        <tr>
+          <td><code>${l.accountCode}</code></td>
+          <td><strong>${l.accountName}</strong></td>
+          <td style="font-size:12px; color:var(--text-subtle);">${l.description || '-'}</td>
+          <td class="num">${l.debit > 0 ? ui.formatINR(l.debit) : '-'}</td>
+          <td class="num">${l.credit > 0 ? ui.formatINR(l.credit) : '-'}</td>
+        </tr>
+      `;
+    });
+
+    document.getElementById('txDetTotalDebit').textContent = ui.formatINR(voucher.totalDebit);
+    document.getElementById('txDetTotalCredit').textContent = ui.formatINR(voucher.totalCredit);
+
+    ui.openModal('modalTransactionDetails');
+  };
+
+  window.appRefreshTransactions = async function() {
+    await loadTransactions();
+    ui.showToast('Journal vouchers refreshed from ledger.', 'info');
+  };
+
+  document.getElementById('btnFilterJournal')?.addEventListener('click', loadTransactions);
+  document.getElementById('journalSearchInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') loadTransactions();
+  });
+  document.getElementById('journalTypeFilter')?.addEventListener('change', loadTransactions);
+  document.getElementById('btnResetJournal')?.addEventListener('click', () => {
+    const s = document.getElementById('journalSearchInput');
+    const t = document.getElementById('journalTypeFilter');
+    if (s) s.value = '';
+    if (t) t.value = 'ALL';
+    loadTransactions();
+    ui.showToast('Journal filters reset.', 'info');
+  });
+
 
   // --- Dropdown Population & Dynamic Invoice Forms ---
 
@@ -1219,71 +1560,297 @@ document.addEventListener('DOMContentLoaded', () => {
     loadInvoices();
   });
 
-  // Record Payment
+  // Record Payment Controller & Allocation Engine
+  window.appOpenRecordPayment = function(targetCustomerId) {
+    const errorBox = document.getElementById('paymentFormError');
+    if (errorBox) {
+      errorBox.style.display = 'none';
+      errorBox.textContent = '';
+    }
+
+    const dateInp = document.getElementById('paymentDateInput');
+    if (dateInp) {
+      dateInp.value = new Date().toISOString().split('T')[0];
+    }
+
+    const amtInp = document.getElementById('payAmountInput');
+    const refInp = document.getElementById('payRefInput');
+    if (amtInp) amtInp.value = '';
+    if (refInp) refInp.value = '';
+
+    const custSelect = document.getElementById('payCustomerSelect');
+    if (custSelect) {
+      if (targetCustomerId) {
+        custSelect.value = targetCustomerId;
+      }
+    }
+
+    populateDepositAccountsDropdown();
+    ui.openModal('modalPayment');
+
+    if (custSelect && custSelect.value) {
+      custSelect.dispatchEvent(new Event('change'));
+    } else {
+      const tbody = document.getElementById('payAllocationsBody');
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 16px; color:var(--text-subtle);">Select a debtor customer above to load open delivered invoices.</td></tr>';
+      }
+      recalculatePaymentAllocations();
+    }
+  };
+
+  // Recalculate Payment Allocations
+  function recalculatePaymentAllocations() {
+    const amtInp = document.getElementById('payAmountInput');
+    const remitAmount = parseFloat(amtInp ? amtInp.value : 0) || 0;
+
+    let totalAlloc = 0;
+    let hasOverallocation = false;
+
+    const rows = document.querySelectorAll('.pay-alloc-row');
+    rows.forEach(row => {
+      const due = parseFloat(row.dataset.due) || 0;
+      const allocInp = row.querySelector('.pay-alloc-input');
+      const allocVal = parseFloat(allocInp ? allocInp.value : 0) || 0;
+      const remEl = row.querySelector('.pay-alloc-remaining');
+
+      totalAlloc += allocVal;
+      const remaining = Math.max(0, due - allocVal);
+      if (remEl) {
+        remEl.textContent = ui.formatINR(remaining);
+        remEl.style.color = remaining === 0 ? 'var(--emerald-500)' : 'var(--amber-500)';
+      }
+
+      if (allocVal > due) {
+        hasOverallocation = true;
+        allocInp.style.borderColor = 'var(--rose-500)';
+        allocInp.title = 'Allocated amount exceeds invoice due balance!';
+      } else {
+        allocInp.style.borderColor = 'var(--border-subtle)';
+        allocInp.title = '';
+      }
+    });
+
+    const allocTotalEl = document.getElementById('payAllocTotal');
+    const remitTotalEl = document.getElementById('payRemitTotal');
+    const diffBadge = document.getElementById('payAllocDiffBadge');
+
+    if (allocTotalEl) allocTotalEl.textContent = ui.formatINR(totalAlloc);
+    if (remitTotalEl) remitTotalEl.textContent = ui.formatINR(remitAmount);
+
+    const diff = Math.abs(remitAmount - totalAlloc);
+
+    if (diffBadge) {
+      if (hasOverallocation) {
+        diffBadge.innerHTML = `<span class="badge badge-reversal" style="background:rgba(244,63,94,0.2); color:#f43f5e;">⚠️ Overpayment detected</span>`;
+      } else if (remitAmount > 0 && diff < 0.01) {
+        diffBadge.innerHTML = `<span class="badge badge-delivered">✓ Exact Match (Diff: ₹0.00)</span>`;
+      } else if (remitAmount === 0 && totalAlloc === 0) {
+        diffBadge.innerHTML = `<span class="badge badge-draft">Awaiting Amount</span>`;
+      } else {
+        diffBadge.innerHTML = `<span class="badge badge-draft" style="color:var(--amber-500);">Mismatch: ₹${diff.toFixed(2)}</span>`;
+      }
+    }
+  }
+
+  // Customer selection in Payment modal -> load open invoices
   document.getElementById('payCustomerSelect')?.addEventListener('change', async () => {
     const custId = document.getElementById('payCustomerSelect').value;
-    const container = document.getElementById('payAllocationsContainer');
-    container.innerHTML = '';
+    const tbody = document.getElementById('payAllocationsBody');
+    if (!tbody) return;
 
-    if (!custId) return;
+    if (!custId) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 16px; color:var(--text-subtle);">Select a debtor customer above to load open delivered invoices.</td></tr>';
+      recalculatePaymentAllocations();
+      return;
+    }
+
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 16px;">Loading customer invoices...</td></tr>';
 
     try {
       const invoices = await api.getInvoices({ status: 'DELIVERED' });
-      const custInvoices = invoices.filter(i => i.customerId === custId && i.dueAmount > 0);
+      const custInvoices = invoices.filter(i => (i.customerId === custId || i.customer_id === custId) && (i.dueAmount || i.due_amount) > 0);
 
       if (custInvoices.length === 0) {
-        container.innerHTML = '<div style="color:var(--text-subtle); padding:8px;">No open unpaid invoices for this customer.</div>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 20px; color:var(--emerald-500);">✓ This customer has zero open invoices with outstanding receivables. All invoices are settled.</td></tr>';
+        recalculatePaymentAllocations();
         return;
       }
 
+      tbody.innerHTML = '';
+      let sumDue = 0;
+
       custInvoices.forEach(inv => {
-        container.innerHTML += `
-          <div style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:rgba(255,255,255,0.02); border-radius:var(--radius-sm); margin-bottom:8px;">
-            <div>
-              <strong>${inv.invoiceNumber}</strong> (${ui.formatDate(inv.invoiceDate)})<br>
-              <small style="color:var(--text-muted);">Due: ${ui.formatINR(inv.dueAmount)}</small>
-            </div>
-            <div style="width:140px;">
-              <input type="number" class="form-input pay-alloc-input" data-invoice-id="${inv.id}" max="${inv.dueAmount}" value="${inv.dueAmount}" step="0.01">
-            </div>
-          </div>
+        const invDue = inv.dueAmount || inv.due_amount || 0;
+        const invPaid = inv.paidAmount || inv.paid_amount || 0;
+        const invTotal = inv.totalAmount || inv.total_amount || 0;
+        sumDue += invDue;
+
+        tbody.innerHTML += `
+          <tr class="pay-alloc-row" data-invoice-id="${inv.id}" data-due="${invDue}">
+            <td><strong>${inv.invoiceNumber}</strong></td>
+            <td>${ui.formatDate(inv.invoiceDate)}</td>
+            <td class="num">${ui.formatINR(invTotal)}</td>
+            <td class="num" style="color:var(--emerald-500);">${ui.formatINR(invPaid)}</td>
+            <td class="num" style="color:var(--amber-500); font-weight:700;">${ui.formatINR(invDue)}</td>
+            <td class="num">
+              <input type="number" class="form-input pay-alloc-input" data-invoice-id="${inv.id}" max="${invDue}" min="0" step="0.01" value="0.00" style="padding: 4px 8px; font-size: 12px; text-align: right;">
+            </td>
+            <td class="num pay-alloc-remaining" style="font-weight:600; color:var(--amber-500);">
+              ${ui.formatINR(invDue)}
+            </td>
+            <td>
+              <button type="button" class="btn btn-secondary btn-sm btn-pay-full" style="font-size:11px; padding:2px 8px;" title="Pay entire outstanding balance">Pay Full</button>
+            </td>
+          </tr>
         `;
       });
+
+      // Wire allocation inputs and Pay Full buttons
+      tbody.querySelectorAll('.pay-alloc-input').forEach(inp => {
+        inp.addEventListener('input', recalculatePaymentAllocations);
+      });
+
+      tbody.querySelectorAll('.btn-pay-full').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const row = e.target.closest('.pay-alloc-row');
+          const due = parseFloat(row.dataset.due) || 0;
+          const inp = row.querySelector('.pay-alloc-input');
+          if (inp) {
+            inp.value = due.toFixed(2);
+            // If total payment input is empty, update it
+            const amtInp = document.getElementById('payAmountInput');
+            if (amtInp && (!amtInp.value || parseFloat(amtInp.value) === 0)) {
+              amtInp.value = due.toFixed(2);
+            }
+          }
+          recalculatePaymentAllocations();
+        });
+      });
+
+      recalculatePaymentAllocations();
     } catch (err) {
-      console.error('Error fetching invoices:', err);
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding: 16px; color:var(--rose-500);">Error loading invoices: ${err.message}</td></tr>`;
     }
   });
 
+  document.getElementById('payAmountInput')?.addEventListener('input', recalculatePaymentAllocations);
+
+  // Auto-allocate button handler
+  document.getElementById('btnAutoAllocatePayment')?.addEventListener('click', () => {
+    const amtInp = document.getElementById('payAmountInput');
+    let targetAmount = parseFloat(amtInp ? amtInp.value : 0) || 0;
+
+    const rows = document.querySelectorAll('.pay-alloc-row');
+    if (rows.length === 0) return;
+
+    if (targetAmount <= 0) {
+      // If payment input is empty, fill with sum of all open dues
+      let totalDue = 0;
+      rows.forEach(r => { totalDue += (parseFloat(r.dataset.due) || 0); });
+      targetAmount = totalDue;
+      if (amtInp) amtInp.value = totalDue.toFixed(2);
+    }
+
+    let remainingToAllocate = targetAmount;
+    rows.forEach(row => {
+      const due = parseFloat(row.dataset.due) || 0;
+      const inp = row.querySelector('.pay-alloc-input');
+      if (inp) {
+        if (remainingToAllocate <= 0) {
+          inp.value = '0.00';
+        } else if (remainingToAllocate >= due) {
+          inp.value = due.toFixed(2);
+          remainingToAllocate -= due;
+        } else {
+          inp.value = remainingToAllocate.toFixed(2);
+          remainingToAllocate = 0;
+        }
+      }
+    });
+
+    recalculatePaymentAllocations();
+    ui.showToast('Payment amount allocated across open invoices.', 'info');
+  });
+
+  // Submit Payment Handler
   document.getElementById('btnSubmitPayment')?.addEventListener('click', async () => {
+    const errorBox = document.getElementById('paymentFormError');
+    if (errorBox) {
+      errorBox.style.display = 'none';
+      errorBox.textContent = '';
+    }
+
     const customerId = document.getElementById('payCustomerSelect').value;
     const depositAccountId = document.getElementById('payDepositSelect').value;
     const amount = parseFloat(document.getElementById('payAmountInput').value);
-    const referenceNumber = document.getElementById('payRefInput').value;
+    const referenceNumber = document.getElementById('payRefInput')?.value.trim() || undefined;
+    const paymentDate = document.getElementById('paymentDateInput')?.value || undefined;
 
-    if (!customerId || !depositAccountId || !amount || amount <= 0) {
-      ui.showToast('Please provide valid customer, deposit account, and payment amount.', 'error');
+    if (!customerId) {
+      if (errorBox) { errorBox.textContent = 'Please select a debtor customer.'; errorBox.style.display = 'block'; }
+      ui.showToast('Please select a debtor customer.', 'error');
+      return;
+    }
+
+    if (!depositAccountId) {
+      if (errorBox) { errorBox.textContent = 'Please select a deposit asset account (Cash or Bank).'; errorBox.style.display = 'block'; }
+      ui.showToast('Please select a deposit asset account.', 'error');
+      return;
+    }
+
+    if (isNaN(amount) || amount <= 0) {
+      if (errorBox) { errorBox.textContent = 'Remittance amount must be greater than zero.'; errorBox.style.display = 'block'; }
+      ui.showToast('Remittance amount must be greater than zero.', 'error');
       return;
     }
 
     const allocations = [];
-    document.querySelectorAll('.pay-alloc-input').forEach(inp => {
-      const allocAmt = parseFloat(inp.value) || 0;
+    let sumAlloc = 0;
+    let overDueError = null;
+
+    document.querySelectorAll('.pay-alloc-row').forEach(row => {
+      const invId = row.dataset.invoiceId;
+      const due = parseFloat(row.dataset.due) || 0;
+      const inp = row.querySelector('.pay-alloc-input');
+      const allocAmt = parseFloat(inp ? inp.value : 0) || 0;
+
       if (allocAmt > 0) {
-        allocations.push({
-          invoiceId: inp.dataset.invoiceId,
-          amount: allocAmt
-        });
+        if (allocAmt > due) {
+          overDueError = `Allocation ₹${allocAmt.toFixed(2)} exceeds remaining due balance ₹${due.toFixed(2)}.`;
+        }
+        allocations.push({ invoiceId: invId, amount: allocAmt });
+        sumAlloc += allocAmt;
       }
     });
 
+    if (overDueError) {
+      if (errorBox) { errorBox.textContent = overDueError; errorBox.style.display = 'block'; }
+      ui.showToast(overDueError, 'error');
+      return;
+    }
+
     if (allocations.length === 0) {
+      if (errorBox) { errorBox.textContent = 'Please allocate payment amount to at least one invoice.'; errorBox.style.display = 'block'; }
       ui.showToast('Please allocate payment amount to at least one invoice.', 'error');
       return;
     }
 
-    const paymentDate = document.getElementById('paymentDateInput')?.value || undefined;
+    if (Math.abs(sumAlloc - amount) > 0.01) {
+      const msg = `Sum of allocations (₹${sumAlloc.toFixed(2)}) must exactly equal total payment amount (₹${amount.toFixed(2)}).`;
+      if (errorBox) { errorBox.textContent = msg; errorBox.style.display = 'block'; }
+      ui.showToast(msg, 'error');
+      return;
+    }
+
+    const submitBtn = document.getElementById('btnSubmitPayment');
 
     try {
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Recording Double-Entry Payment...';
+      }
+
       const result = await api.recordPayment({
         customerId,
         depositAccountId,
@@ -1293,16 +1860,81 @@ document.addEventListener('DOMContentLoaded', () => {
         allocations
       });
 
-      ui.showToast(`Payment ${result.paymentNumber} recorded! AR relieved: ${ui.formatINR(amount)}`, 'success');
       ui.closeModal('modalPayment');
+
+      // Populate Success Receipt Modal
+      const custOpt = document.getElementById('payCustomerSelect').selectedOptions[0];
+      const custName = custOpt ? custOpt.text.split(' (')[0] : 'Customer';
+      const depOpt = document.getElementById('payDepositSelect').selectedOptions[0];
+      const depName = depOpt ? depOpt.text : 'Asset Account';
+
+      document.getElementById('successPayNum').textContent = result.paymentNumber;
+      document.getElementById('successPayCustomer').textContent = custName;
+      document.getElementById('successPayAccount').textContent = depName;
+      document.getElementById('successPayDate').textContent = ui.formatDate(result.paymentDate);
+      document.getElementById('successPayAmount').textContent = ui.formatINR(result.amount);
+      document.getElementById('successPayJournal').textContent = result.journalEntryId;
+
+      const settledContainer = document.getElementById('successPaySettledList');
+      settledContainer.innerHTML = '';
+      if (result.settledInvoices && result.settledInvoices.length > 0) {
+        result.settledInvoices.forEach(s => {
+          settledContainer.innerHTML += `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:rgba(255,255,255,0.03); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); margin-bottom:6px; font-size:12px;">
+              <div>
+                <strong>${s.invoiceNumber}</strong>
+                <span class="badge ${s.isFullyPaid ? 'badge-delivered' : 'badge-draft'}" style="margin-left:6px;">
+                  ${s.isFullyPaid ? 'FULLY SETTLED' : 'PARTIAL'}
+                </span>
+              </div>
+              <div style="text-align:right;">
+                <span>Paid: <strong>${ui.formatINR(s.paidAmount)}</strong></span> • 
+                <span>Remaining Due: <strong style="color:${s.dueAmount > 0 ? 'var(--amber-500)' : 'var(--emerald-500)'};">${ui.formatINR(s.dueAmount)}</strong></span>
+              </div>
+            </div>
+          `;
+        });
+      }
+
+      ui.openModal('modalPaymentSuccess');
+      ui.showToast(`Payment ${result.paymentNumber} recorded! AR relieved: ${ui.formatINR(amount)}`, 'success');
+
+      // Refresh all dependent accounting states
       await loadPayments();
       await loadInvoices();
       await loadTrialBalance();
+      await loadTransactions();
       await loadDashboard();
     } catch (err) {
+      if (errorBox) {
+        errorBox.textContent = `Backend Payment Validation Error: ${err.message}`;
+        errorBox.style.display = 'block';
+      }
       ui.showToast(`Payment failed: ${err.message}`, 'error');
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Record Payment & Relieve AR';
+      }
     }
   });
+
+  // Payment Filter Listeners
+  document.getElementById('btnFilterPayments')?.addEventListener('click', () => loadPayments());
+  document.getElementById('paySearchInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') loadPayments();
+  });
+  document.getElementById('btnResetPayments')?.addEventListener('click', () => {
+    const s = document.getElementById('paySearchInput');
+    const f = document.getElementById('payDateFrom');
+    const t = document.getElementById('payDateTo');
+    if (s) s.value = '';
+    if (f) f.value = '';
+    if (t) t.value = '';
+    loadPayments();
+    ui.showToast('Payment filters reset.', 'info');
+  });
+
 
   // Create Customer
   btnOpenNewCustomerModal?.addEventListener('click', () => ui.openModal('modalCustomer'));
@@ -1373,12 +2005,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.querySelectorAll('.btn-modal-close').forEach(btn => {
     btn.addEventListener('click', () => {
-      ui.closeModal('modalInvoice');
-      ui.closeModal('modalPayment');
-      ui.closeModal('modalVoid');
-      ui.closeModal('modalCustomer');
-      ui.closeModal('modalItem');
-      ui.closeModal('modalConfirm');
+      const modal = btn.closest('.modal-overlay');
+      if (modal) {
+        modal.classList.remove('active');
+      } else {
+        document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
+      }
     });
   });
 
