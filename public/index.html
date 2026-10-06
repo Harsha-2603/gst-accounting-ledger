@@ -326,10 +326,48 @@
 
         <!-- 5. PAYMENTS RECEIVED VIEW -->
         <section class="view-section" id="view-payments">
+          <!-- KPI Summary Strip -->
+          <div class="invoice-stats-strip">
+            <div class="invoice-stat-card">
+              <span class="invoice-stat-label">Total Remittances</span>
+              <span class="invoice-stat-value" id="payStatCount">0</span>
+            </div>
+            <div class="invoice-stat-card">
+              <span class="invoice-stat-label">Total Collected (AR Relief)</span>
+              <span class="invoice-stat-value" style="color: var(--emerald-500);" id="payStatTotal">₹0.00</span>
+            </div>
+            <div class="invoice-stat-card">
+              <span class="invoice-stat-label">Bank Operating Account (1010)</span>
+              <span class="invoice-stat-value" id="payStatBank">₹0.00</span>
+            </div>
+            <div class="invoice-stat-card">
+              <span class="invoice-stat-label">Cash on Hand (1000)</span>
+              <span class="invoice-stat-value" id="payStatCash">₹0.00</span>
+            </div>
+          </div>
+
+          <!-- Filter & Action Bar -->
+          <div class="invoice-filter-bar" style="margin-bottom: 20px;">
+            <div style="flex: 2; min-width: 220px;">
+              <input type="text" class="form-input" id="paySearchInput" placeholder="🔍 Search payment #, customer name, or UTR reference...">
+            </div>
+            <div style="flex: 1; min-width: 140px;">
+              <input type="date" class="form-input" id="payDateFrom" title="From payment date">
+            </div>
+            <div style="flex: 1; min-width: 140px;">
+              <input type="date" class="form-input" id="payDateTo" title="To payment date">
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-secondary btn-sm" id="btnFilterPayments">Filter</button>
+              <button class="btn btn-secondary btn-sm" id="btnResetPayments">Reset</button>
+              <button class="btn btn-primary btn-sm" id="btnOpenRecordPayment" onclick="window.appOpenRecordPayment && window.appOpenRecordPayment()">+ Record Payment</button>
+            </div>
+          </div>
+
           <div class="card">
             <div class="card-header">
-              <div class="card-title">Customer Payment Remittances & AR Relief</div>
-              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalPayment').classList.add('active')">+ Record Payment</button>
+              <div class="card-title">Customer Remittances & Accounts Receivable Relief</div>
+              <div style="font-size: 12px; color: var(--text-subtle);">Direct double-entry ledger postings into Cash/Bank asset accounts</div>
             </div>
             <div class="table-responsive">
               <table class="data-table">
@@ -340,11 +378,13 @@
                     <th>Date</th>
                     <th>Deposit Account</th>
                     <th>Reference / UTR</th>
-                    <th class="num">Remittance Amount</th>
+                    <th class="num">Remittance (₹)</th>
+                    <th>GL Journal Voucher</th>
+                    <th>Status</th>
                   </tr>
                 </thead>
                 <tbody id="paymentsTableBody">
-                  <tr><td colspan="6" style="text-align:center; padding: 32px;">Loading payments...</td></tr>
+                  <tr><td colspan="8" style="text-align:center; padding: 32px;">Loading payments...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -353,41 +393,68 @@
 
         <!-- 6. TRIAL BALANCE VIEW -->
         <section class="view-section" id="view-trial-balance">
+          <!-- 4 Authoritative Summary Cards -->
+          <div class="tb-summary-strip">
+            <div class="tb-card">
+              <span class="tb-card-label">Total Debit (Σ Dr)</span>
+              <span class="tb-card-value" id="tbCardDebit" style="color: var(--primary-400);">₹0.00</span>
+            </div>
+            <div class="tb-card">
+              <span class="tb-card-label">Total Credit (Σ Cr)</span>
+              <span class="tb-card-value" id="tbCardCredit" style="color: var(--emerald-500);">₹0.00</span>
+            </div>
+            <div class="tb-card">
+              <span class="tb-card-label">Equilibrium Difference</span>
+              <span class="tb-card-value" id="tbCardDiff">₹0.00</span>
+            </div>
+            <div class="tb-card">
+              <span class="tb-card-label">Authoritative Status</span>
+              <div id="tbCardStatus">
+                <span class="badge badge-delivered" style="font-size: 13px; padding: 4px 10px;">Verifying...</span>
+              </div>
+            </div>
+          </div>
+
           <div id="tbEquilibriumBanner" style="padding: 16px 20px; border-radius: var(--radius-md); margin-bottom: 24px; border: 1px solid var(--border-subtle);">
             Verifying mathematical equilibrium...
           </div>
 
           <div class="card">
             <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
-              <div class="card-title">General Ledger Trial Balance Sheet (Accrual Basis)</div>
+              <div>
+                <div class="card-title">General Ledger Trial Balance Sheet (Accrual Basis)</div>
+                <div style="font-size: 12px; color: var(--text-subtle);">Enforces Indian Accounting Standard double-entry balance (Assets + Expenses = Liabilities + Equity + Revenue)</div>
+              </div>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <label style="font-size: 12px; color: var(--text-muted);">As of Date:</label>
                 <input type="date" class="form-input" id="tbDateFilter" style="width: auto; padding: 5px 8px; font-size: 12px;">
-                <button class="btn btn-secondary btn-sm" id="btnFilterTB">Filter</button>
-                <button class="btn btn-secondary btn-sm" onclick="window.appRefreshTrialBalance && window.appRefreshTrialBalance()">Refresh Balance</button>
+                <button class="btn btn-secondary btn-sm" id="btnFilterTB">Apply Date</button>
+                <button class="btn btn-secondary btn-sm" id="btnResetTB">Reset</button>
+                <button class="btn btn-primary btn-sm" onclick="window.appRefreshTrialBalance && window.appRefreshTrialBalance()">Refresh Balance</button>
               </div>
             </div>
             <div class="table-responsive">
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>Code</th>
+                    <th>Account Code</th>
                     <th>Account Name</th>
-                    <th>Type</th>
-                    <th class="num">Total Debit</th>
-                    <th class="num">Total Credit</th>
-                    <th class="num">Net Balance</th>
+                    <th>Account Type</th>
+                    <th>Normal Balance</th>
+                    <th class="num">Total Debit (₹)</th>
+                    <th class="num">Total Credit (₹)</th>
+                    <th class="num">Net Balance (₹)</th>
                   </tr>
                 </thead>
                 <tbody id="trialBalanceTableBody">
-                  <tr><td colspan="6" style="text-align:center; padding: 32px;">Loading trial balance accounts...</td></tr>
+                  <tr><td colspan="7" style="text-align:center; padding: 32px;">Loading trial balance accounts...</td></tr>
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colspan="3"><strong>GRAND TOTAL EQUILIBRIUM (Σ Debit == Σ Credit)</strong></td>
+                    <td colspan="4"><strong>GRAND TOTAL EQUILIBRIUM (Σ Debit == Σ Credit)</strong></td>
                     <td class="num" id="tbTotalDebit">₹0.00</td>
                     <td class="num" id="tbTotalCredit">₹0.00</td>
-                    <td class="num" style="color: var(--emerald-500); font-weight:700;">BALANCED (0.00)</td>
+                    <td class="num" id="tbTotalStatus" style="font-weight:700;">-</td>
                   </tr>
                 </tfoot>
               </table>
@@ -397,19 +464,61 @@
 
         <!-- 7. GSTR-1 TAX RETURN VIEW -->
         <section class="view-section" id="view-gstr1">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; background: var(--bg-card); padding: 12px 18px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); flex-wrap: wrap; gap: 10px;">
-            <div style="font-weight: 600; font-size: 13.5px;">Statutory Return Period Filter</div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <label style="font-size: 12px; color: var(--text-muted);">From:</label>
-              <input type="date" class="form-input" id="gstr1FromDate" style="width: auto; padding: 5px 8px; font-size: 12px;">
-              <label style="font-size: 12px; color: var(--text-muted);">To:</label>
-              <input type="date" class="form-input" id="gstr1ToDate" style="width: auto; padding: 5px 8px; font-size: 12px;">
-              <button class="btn btn-primary btn-sm" id="btnFilterGSTR1">Apply Period</button>
+          <!-- GSTR-1 Top Summary Cards -->
+          <div class="gstr1-summary-strip">
+            <div class="gstr1-card">
+              <span class="gstr1-card-label">Taxable Value</span>
+              <span class="gstr1-card-value" id="gstr1StatTaxable">₹0.00</span>
+            </div>
+            <div class="gstr1-card">
+              <span class="gstr1-card-label">Central Tax (CGST)</span>
+              <span class="gstr1-card-value" style="color: var(--blue-500);" id="gstr1StatCGST">₹0.00</span>
+            </div>
+            <div class="gstr1-card">
+              <span class="gstr1-card-label">State Tax (SGST)</span>
+              <span class="gstr1-card-value" style="color: var(--blue-500);" id="gstr1StatSGST">₹0.00</span>
+            </div>
+            <div class="gstr1-card">
+              <span class="gstr1-card-label">Integrated Tax (IGST)</span>
+              <span class="gstr1-card-value" style="color: var(--purple-500);" id="gstr1StatIGST">₹0.00</span>
+            </div>
+            <div class="gstr1-card">
+              <span class="gstr1-card-label">Grand Total Outward Value</span>
+              <span class="gstr1-card-value" style="color: var(--emerald-500);" id="gstr1StatTotal">₹0.00</span>
             </div>
           </div>
-          <div class="card">
+
+          <!-- GSTR-1 Filter Bar -->
+          <div class="invoice-filter-bar" style="margin-bottom: 20px;">
+            <div style="flex: 1.5; min-width: 200px;">
+              <input type="text" class="form-input" id="gstr1SearchInput" placeholder="🔍 Search customer GSTIN or trade name...">
+            </div>
+            <div style="flex: 1; min-width: 140px;">
+              <select class="form-select" id="gstr1SupplyTypeFilter">
+                <option value="ALL">All Supply Types</option>
+                <option value="INTRA">Intra-State (CGST + SGST)</option>
+                <option value="INTER">Inter-State (IGST)</option>
+              </select>
+            </div>
+            <div style="flex: 1; min-width: 130px;">
+              <input type="date" class="form-input" id="gstr1FromDate" title="Period From Date">
+            </div>
+            <div style="flex: 1; min-width: 130px;">
+              <input type="date" class="form-input" id="gstr1ToDate" title="Period To Date">
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-primary btn-sm" id="btnFilterGSTR1">Apply Period</button>
+              <button class="btn btn-secondary btn-sm" id="btnResetGSTR1">Reset</button>
+            </div>
+          </div>
+
+          <!-- Section 4A: B2B Invoices Table -->
+          <div class="card" style="margin-bottom: 24px;">
             <div class="card-header">
-              <div class="card-title">GSTR-1 Section 4A: B2B Invoices Summary</div>
+              <div>
+                <div class="card-title">GSTR-1 Section 4A: B2B Invoices Summary</div>
+                <div style="font-size: 12px; color: var(--text-subtle);">Outward taxable supplies made to registered business entities with Place of Supply breakdown</div>
+              </div>
             </div>
             <div class="table-responsive">
               <table class="data-table">
@@ -418,42 +527,49 @@
                     <th>Customer GSTIN</th>
                     <th>Trade Name</th>
                     <th>Invoice #</th>
-                    <th>Date</th>
+                    <th>Invoice Date</th>
                     <th>Place of Supply</th>
-                    <th class="num">Taxable Value</th>
+                    <th>Supply Type</th>
+                    <th class="num">Taxable Value (₹)</th>
                     <th class="num">Rate</th>
-                    <th class="num">CGST</th>
-                    <th class="num">SGST</th>
-                    <th class="num">IGST</th>
+                    <th class="num">CGST (₹)</th>
+                    <th class="num">SGST (₹)</th>
+                    <th class="num">IGST (₹)</th>
+                    <th class="num">Invoice Total (₹)</th>
                   </tr>
                 </thead>
                 <tbody id="gstr1B2BBody">
-                  <tr><td colspan="10" style="text-align:center; padding: 24px;">Loading B2B returns...</td></tr>
+                  <tr><td colspan="12" style="text-align:center; padding: 24px;">Loading B2B returns...</td></tr>
                 </tbody>
               </table>
             </div>
           </div>
 
+          <!-- Section 12: HSN Summary Table -->
           <div class="card">
             <div class="card-header">
-              <div class="card-title">GSTR-1 Section 12: HSN-Wise Summary of Outward Supplies</div>
+              <div>
+                <div class="card-title">GSTR-1 Section 12: HSN-Wise Summary of Outward Supplies</div>
+                <div style="font-size: 12px; color: var(--text-subtle);">Statutory summary of goods and services classified by 4/6-digit HSN/SAC codes</div>
+              </div>
             </div>
             <div class="table-responsive">
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>HSN / SAC</th>
+                    <th>HSN / SAC Code</th>
                     <th>Description</th>
                     <th>UQC</th>
-                    <th class="num">Total Qty</th>
-                    <th class="num">Taxable Value</th>
-                    <th class="num">CGST</th>
-                    <th class="num">SGST</th>
-                    <th class="num">IGST</th>
+                    <th class="num">Total Quantity</th>
+                    <th class="num">Taxable Value (₹)</th>
+                    <th class="num">CGST (₹)</th>
+                    <th class="num">SGST (₹)</th>
+                    <th class="num">IGST (₹)</th>
+                    <th class="num">Total Invoiced (₹)</th>
                   </tr>
                 </thead>
                 <tbody id="gstr1HSNBody">
-                  <tr><td colspan="8" style="text-align:center; padding: 24px;">Loading HSN summary...</td></tr>
+                  <tr><td colspan="9" style="text-align:center; padding: 24px;">Loading HSN summary...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -462,9 +578,33 @@
 
         <!-- 8. AUDIT JOURNAL LOG VIEW -->
         <section class="view-section" id="view-journal">
+          <!-- Journal Filter Bar -->
+          <div class="invoice-filter-bar" style="margin-bottom: 20px;">
+            <div style="flex: 2; min-width: 220px;">
+              <input type="text" class="form-input" id="journalSearchInput" placeholder="🔍 Search voucher #, narration, or account code...">
+            </div>
+            <div style="flex: 1; min-width: 140px;">
+              <select class="form-select" id="journalTypeFilter">
+                <option value="ALL">All Transaction Types</option>
+                <option value="INVOICE">INVOICE (Sales & Tax)</option>
+                <option value="PAYMENT">PAYMENT (AR Remittance)</option>
+                <option value="REVERSAL">REVERSAL (Immutable Contra-Entry)</option>
+                <option value="MANUAL">MANUAL (Journal Voucher)</option>
+              </select>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-secondary btn-sm" id="btnFilterJournal">Filter</button>
+              <button class="btn btn-secondary btn-sm" id="btnResetJournal">Reset</button>
+              <button class="btn btn-primary btn-sm" onclick="window.appRefreshTransactions && window.appRefreshTransactions()">Refresh Journal</button>
+            </div>
+          </div>
+
           <div class="card">
             <div class="card-header">
-              <div class="card-title">Double-Entry General Ledger Audit Log (Immutable Postings)</div>
+              <div>
+                <div class="card-title">Double-Entry General Ledger Audit Log (Immutable Postings)</div>
+                <div style="font-size: 12px; color: var(--text-subtle);">Complies with Indian Companies Act Section 128 (Zero Delete Rule) • Every voucher is mathematically balanced</div>
+              </div>
             </div>
             <div class="table-responsive">
               <table class="data-table">
@@ -473,14 +613,16 @@
                     <th>Voucher #</th>
                     <th>Date</th>
                     <th>Type</th>
-                    <th>Account</th>
-                    <th>Narration</th>
+                    <th>Linked Document</th>
+                    <th>Narration / Memo</th>
                     <th class="num">Debit (₹)</th>
                     <th class="num">Credit (₹)</th>
+                    <th>Equilibrium Status</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="journalTableBody">
-                  <tr><td colspan="7" style="text-align:center; padding: 32px;">Loading journal vouchers...</td></tr>
+                  <tr><td colspan="9" style="text-align:center; padding: 32px;">Loading journal vouchers...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -896,52 +1038,215 @@
 
   <!-- MODAL: RECORD PAYMENT -->
   <div class="modal-overlay" id="modalPayment">
-    <div class="modal-dialog">
+    <div class="modal-dialog" style="max-width: 780px;">
       <div class="modal-header">
-        <h2 class="modal-title">Record Customer Remittance</h2>
+        <div>
+          <h2 class="modal-title">Record Customer Remittance</h2>
+          <div style="font-size: 12px; color: var(--text-subtle);">Relieves Accounts Receivable (1200) and deposits into Cash/Bank asset account with statutory double-entry posting</div>
+        </div>
         <button class="btn-close btn-modal-close">&times;</button>
       </div>
       <div class="modal-body">
+        <!-- Error Alert Container -->
+        <div id="paymentFormError" style="display:none; padding: 10px 14px; background: rgba(244, 63, 94, 0.15); border: 1px solid rgba(244, 63, 94, 0.4); border-radius: var(--radius-sm); color: #fecdd3; font-size: 12.5px; margin-bottom: 14px;"></div>
+
         <div class="form-row">
-          <div class="form-group" style="flex: 1;">
-            <label class="form-label">Customer</label>
-            <select class="form-select" id="payCustomerSelect">
+          <div class="form-group" style="flex: 1.5;">
+            <label class="form-label">Customer (Debtor) *</label>
+            <select class="form-select" id="payCustomerSelect" required>
               <option value="">-- Choose Customer --</option>
             </select>
           </div>
           <div class="form-group" style="flex: 1;">
-            <label class="form-label">Payment Date</label>
-            <input type="date" class="form-input" id="paymentDateInput">
+            <label class="form-label">Payment Date *</label>
+            <input type="date" class="form-input" id="paymentDateInput" required>
           </div>
-          <div class="form-group" style="flex: 1;">
-            <label class="form-label">Deposit Asset Account</label>
-            <select class="form-select" id="payDepositSelect">
+          <div class="form-group" style="flex: 1.2;">
+            <label class="form-label">Deposit Asset Account *</label>
+            <select class="form-select" id="payDepositSelect" required>
               <!-- Dynamically populated with Cash/Bank accounts -->
             </select>
           </div>
         </div>
 
         <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Remittance Amount (₹)</label>
-            <input type="number" class="form-input" id="payAmountInput" placeholder="0.00" min="0.01" step="0.01">
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label">Total Remittance Amount (₹) *</label>
+            <input type="number" class="form-input" id="payAmountInput" placeholder="0.00" min="0.01" step="0.01" required>
           </div>
-          <div class="form-group">
-            <label class="form-label">Reference / UTR #</label>
-            <input type="text" class="form-input" id="payRefInput" placeholder="e.g. NEFT-8947192">
+          <div class="form-group" style="flex: 1.2;">
+            <label class="form-label">Reference / UTR # (Optional)</label>
+            <input type="text" class="form-input" id="payRefInput" placeholder="e.g. NEFT-8947192 / Cheque #10294">
           </div>
         </div>
 
         <div class="form-group">
-          <label class="form-label">Allocate Payment to Open Invoices</label>
-          <div id="payAllocationsContainer" style="max-height: 200px; overflow-y: auto;">
-            <div style="color:var(--text-subtle); padding: 8px;">Select a customer to view open invoices.</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <label class="form-label" style="margin-bottom: 0;">Allocate Payment to Open Invoices *</label>
+            <button type="button" class="btn btn-secondary btn-sm" id="btnAutoAllocatePayment" style="font-size: 11.5px; padding: 4px 10px;">⚡ Auto-Allocate Amount</button>
+          </div>
+          <div class="alloc-box">
+            <div class="table-responsive">
+              <table class="data-table" style="font-size: 12px; margin-bottom: 0;">
+                <thead>
+                  <tr>
+                    <th>Invoice #</th>
+                    <th>Date</th>
+                    <th class="num">Invoice Total</th>
+                    <th class="num">Already Paid</th>
+                    <th class="num">Amount Due</th>
+                    <th style="width: 140px;" class="num">Allocation (₹)</th>
+                    <th class="num">Remaining</th>
+                    <th>Quick Fill</th>
+                  </tr>
+                </thead>
+                <tbody id="payAllocationsBody">
+                  <tr><td colspan="8" style="text-align:center; padding: 16px; color:var(--text-subtle);">Select a debtor customer above to load open delivered invoices.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="alloc-summary-bar">
+              <div>
+                <span>Total Allocated: </span>
+                <strong id="payAllocTotal" style="font-family: var(--font-mono);">₹0.00</strong>
+              </div>
+              <div>
+                <span>Payment Amount: </span>
+                <strong id="payRemitTotal" style="font-family: var(--font-mono);">₹0.00</strong>
+              </div>
+              <div id="payAllocDiffBadge">
+                <span class="badge badge-draft">Difference: ₹0.00</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary btn-modal-close">Cancel</button>
         <button class="btn btn-primary" id="btnSubmitPayment">Record Payment & Relieve AR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: PAYMENT SUCCESS RECEIPT -->
+  <div class="modal-overlay" id="modalPaymentSuccess">
+    <div class="modal-dialog" style="max-width: 540px;">
+      <div class="modal-header">
+        <h2 class="modal-title" style="color: var(--emerald-500);">✓ Remittance Recorded Successfully</h2>
+        <button class="btn-close btn-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="invoice-success-banner">
+          <div style="font-size: 32px; margin-bottom: 6px;">💵</div>
+          <div style="font-size: 17px; font-weight: 700; color: var(--text-main); margin-bottom: 4px;" id="successPayNum">PAY-0001</div>
+          <div style="font-size: 12.5px; color: #a7f3d0;" id="successPayMsg">Double-entry cash deposit & AR relief posted to ledger.</div>
+        </div>
+
+        <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 16px;">
+          <div class="invoice-detail-row">
+            <span>Customer:</span>
+            <span id="successPayCustomer">-</span>
+          </div>
+          <div class="invoice-detail-row">
+            <span>Deposit Account:</span>
+            <span id="successPayAccount">-</span>
+          </div>
+          <div class="invoice-detail-row">
+            <span>Payment Date:</span>
+            <span id="successPayDate">-</span>
+          </div>
+          <div class="invoice-detail-row">
+            <span>Remittance Amount:</span>
+            <strong id="successPayAmount" style="color: var(--emerald-500); font-size: 15px;">₹0.00</strong>
+          </div>
+          <div class="invoice-detail-row" style="border-top: 1px solid var(--border-subtle); padding-top: 8px; margin-top: 6px;">
+            <span>General Ledger Voucher:</span>
+            <span id="successPayJournal" class="badge badge-delivered">JV-0001</span>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-subtle); margin-bottom: 8px;">Settled Invoices & Updated Balances</div>
+          <div id="successPaySettledList" style="max-height: 150px; overflow-y: auto;">
+            <!-- Settled invoice badges inserted dynamically -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-modal-close">Close</button>
+        <button class="btn btn-primary" id="btnSuccessPayGoInvoices" onclick="ui.closeModal('modalPaymentSuccess'); window.appNavigate('invoices');">View Invoices →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: TRANSACTION / JOURNAL VOUCHER DETAILS -->
+  <div class="modal-overlay" id="modalTransactionDetails">
+    <div class="modal-dialog" style="max-width: 760px;">
+      <div class="modal-header">
+        <div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <h2 class="modal-title" id="txDetVoucherNum">Voucher JV-0001</h2>
+            <span id="txDetTypeBadge" class="badge badge-state">INVOICE</span>
+            <span class="voucher-balanced-tag" id="txDetBalancedTag">✓ BALANCED (Dr == Cr)</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-subtle);" id="txDetDate">Posting Date: -</div>
+        </div>
+        <button class="btn-close btn-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Reversal Alert Banner (Visible only if REVERSAL) -->
+        <div id="txDetReversalBanner" style="display: none; padding: 12px 16px; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.35); border-radius: var(--radius-sm); margin-bottom: 16px; color: #e9d5ff; font-size: 12.5px;">
+          <span>🛡️ <strong>Immutable Contra-Entry Reversal (GAP-03 / Section 128):</strong> This transaction reverses an earlier voucher without deleting history. All debits and credits swap polarity to return account balances to zero net effect.</span>
+        </div>
+
+        <!-- Voucher Metadata -->
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 16px;">
+          <div class="invoice-detail-row">
+            <span>Linked Document:</span>
+            <span id="txDetLinkedDoc">-</span>
+          </div>
+          <div class="invoice-detail-row">
+            <span>Narration / Memo:</span>
+            <span id="txDetNarration" style="font-weight: normal; color: var(--text-main);">-</span>
+          </div>
+        </div>
+
+        <!-- Journal Lines Table -->
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 12.5px; font-weight: 700; color: var(--text-main); margin-bottom: 8px;">Double-Entry Ledger Postings</div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Account Code</th>
+                  <th>Account Name</th>
+                  <th>Description / Line Memo</th>
+                  <th class="num">Debit (₹)</th>
+                  <th class="num">Credit (₹)</th>
+                </tr>
+              </thead>
+              <tbody id="txDetLinesBody">
+                <tr><td colspan="5" style="text-align:center; padding: 16px;">Loading postings...</td></tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="3"><strong>VOUCHER EQUILIBRIUM TOTALS</strong></td>
+                  <td class="num" id="txDetTotalDebit" style="color: var(--primary-400); font-weight:700;">₹0.00</td>
+                  <td class="num" id="txDetTotalCredit" style="color: var(--emerald-500); font-weight:700;">₹0.00</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        <div style="font-size: 11.5px; color: var(--text-subtle); display: flex; align-items: center; gap: 6px;">
+          <span>🔒</span>
+          <span>Double-entry vouchers are immutable and cannot be edited. Audit logs are preserved permanently.</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-modal-close">Close Voucher</button>
       </div>
     </div>
   </div>
