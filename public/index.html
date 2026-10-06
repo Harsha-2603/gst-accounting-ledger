@@ -629,46 +629,63 @@
           </div>
         </section>
  
-         <!-- 9. AI ACCOUNTING COPILOT FULL VIEW (#copilot) -->
-         <section class="view-section" id="view-copilot">
-           <div class="card" style="display: flex; flex-direction: column; height: calc(100vh - 150px); min-height: 550px;">
-             <div class="card-header">
-               <div style="display:flex; align-items:center; gap: 10px;">
-                 <div class="card-title">✨ AI Accounting Copilot</div>
-                 <span class="badge badge-delivered">Read-Only Grounded Engine</span>
-               </div>
-               <div style="font-size: 12px; color: var(--text-subtle);">
-                 Zero mutation authority • Grounded strictly in live double-entry records
-               </div>
-             </div>
- 
-             <div style="padding: 12px 18px; background: rgba(99, 102, 241, 0.08); border-bottom: 1px solid rgba(99, 102, 241, 0.2); font-size: 12.5px; color: #c7d2fe; display: flex; align-items: center; gap: 10px;">
-               <span>🛡️</span>
-               <span><strong>Financial Safety Guarantee:</strong> The Copilot has ZERO mutation permissions. Every response cites verified source documents (<code>invoice:*</code>, <code>gst_split:*</code>, <code>trial_balance:*</code>). Attempted write operations are rejected immediately with 0 database changes.</span>
-             </div>
- 
-             <!-- Full-Page Chat Container -->
-             <div class="ai-chat-thread" id="aiPageChatThread" style="flex: 1; padding: 20px; overflow-y: auto;">
-               <!-- Chat messages inserted dynamically -->
-             </div>
- 
-             <div class="ai-suggestions" style="padding: 12px 20px; border-top: 1px solid var(--border-subtle);">
-               <div class="suggestion-label" style="font-size: 11px; text-transform: uppercase; color: var(--text-subtle); margin-bottom: 8px;">Recommended Inquiries:</div>
-               <div class="suggestion-chips" style="display: flex; gap: 8px; flex-wrap: wrap;">
-                 <button class="suggestion-chip page-chip" data-question="Why is invoice INV-0001 amount ₹11,800?">Why is invoice INV-0001 ₹11,800?</button>
-                 <button class="suggestion-chip page-chip" data-question="Does my trial balance balance right now?">Does my trial balance balance?</button>
-                 <button class="suggestion-chip page-chip" data-question="How much CGST and SGST did I collect today?">How much GST did I collect?</button>
-                 <button class="suggestion-chip page-chip" data-question="Show me all unpaid invoices with customer breakdown.">Show unpaid invoices</button>
-               </div>
-             </div>
- 
-             <div style="padding: 16px 20px; border-top: 1px solid var(--border-subtle); display: flex; gap: 12px;">
-               <input type="text" class="ai-input" id="aiPageInput" placeholder="Ask questions about invoices, GST calculations, or ledger equilibrium..." style="flex: 1;" autocomplete="off">
-               <button class="btn btn-primary" id="btnSendPageAI" style="padding: 10px 24px;">Ask Copilot</button>
-             </div>
-           </div>
-         </section>
-       </div>
+        <!-- 9. AI ACCOUNTING COPILOT FULL VIEW (#copilot) -->
+        <section class="view-section" id="view-copilot">
+          <div class="card" style="display: flex; flex-direction: column; height: calc(100vh - 140px); min-height: 560px;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <h2 class="card-title" style="margin: 0; font-size: 18px;">✨ AI Accounting Copilot</h2>
+                  <span class="badge badge-delivered" style="text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; font-weight: 700;">Read-Only</span>
+                </div>
+                <div style="font-size: 12.5px; color: var(--text-subtle); margin-top: 3px;">
+                  Read-only • Grounded in accounting data
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="ai-shield-tag" title="Zero-mutation invariant certified">🛡️ Mutation Guard Active</span>
+                <button class="btn btn-secondary btn-sm" id="btnClearPageAIChat" title="Clear chat thread">Clear Thread</button>
+              </div>
+            </div>
+
+            <!-- Mutation Protection Banner -->
+            <div class="mutation-shield-banner">
+              <div class="shield-icon">🛡️</div>
+              <div class="shield-content">
+                <strong>Strict Read-Only Protection Active:</strong> Copilot cannot create or delete invoices, record payments, modify GST rates, or alter ledger balances. All insights are grounded directly in live double-entry records.
+              </div>
+            </div>
+
+            <!-- Disabled Mode Notification Banner -->
+            <div class="ai-disabled-banner" id="aiPageDisabledBanner" style="display:none;">
+              <span>ℹ️</span>
+              <span>AI Copilot is currently disabled. Core accounting features continue to work normally.</span>
+            </div>
+
+            <!-- Full-Page Chat Container -->
+            <div class="ai-chat-thread" id="aiPageChatThread" style="flex: 1; padding: 20px; overflow-y: auto;">
+              <!-- Chat messages inserted dynamically -->
+            </div>
+
+            <div class="ai-suggestions" style="padding: 12px 20px; border-top: 1px solid var(--border-subtle);">
+              <div class="suggestion-label" style="font-size: 11px; text-transform: uppercase; color: var(--text-subtle); margin-bottom: 8px; font-weight: 700; letter-spacing: 0.04em;">Example Grounded Inquiries:</div>
+              <div class="suggestion-chips" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="suggestion-chip page-chip" data-question="Why is invoice INV-0001 ₹11,800?">Why is invoice INV-0001 ₹11,800?</button>
+                <button class="suggestion-chip page-chip" data-question="How much CGST and SGST did I collect?">How much CGST and SGST did I collect?</button>
+                <button class="suggestion-chip page-chip" data-question="Which invoices are still unpaid?">Which invoices are still unpaid?</button>
+                <button class="suggestion-chip page-chip" data-question="Explain this journal entry.">Explain this journal entry.</button>
+                <button class="suggestion-chip page-chip" data-question="Does my Trial Balance balance?">Does my Trial Balance balance?</button>
+                <button class="suggestion-chip page-chip" data-question="Summarize today's sales and payments.">Summarize today's sales and payments.</button>
+              </div>
+            </div>
+
+            <div style="padding: 16px 20px; border-top: 1px solid var(--border-subtle); display: flex; gap: 12px; background: rgba(15, 23, 42, 0.4);">
+              <input type="text" class="ai-input" id="aiPageInput" placeholder="Ask questions about invoices, GST calculations, journal vouchers, or trial balance..." style="flex: 1;" autocomplete="off">
+              <button class="btn btn-primary" id="btnSendPageAI" style="padding: 10px 24px;">Ask Copilot</button>
+            </div>
+          </div>
+        </section>
+      </div>
     </main>
   </div>
 
@@ -676,16 +693,30 @@
   <div class="ai-drawer-overlay" id="aiDrawerOverlay"></div>
   <aside class="ai-drawer" id="aiDrawer">
     <div class="ai-drawer-header">
-      <div class="ai-drawer-title">
-        <span>✨</span> AI Accounting Copilot
-        <span class="ai-status-pill">Read-Only</span>
+      <div>
+        <div class="ai-drawer-title" style="display: flex; align-items: center; gap: 8px;">
+          <span>✨</span> AI Accounting Copilot
+          <span class="badge badge-delivered" style="font-size: 10.5px; padding: 2px 8px; font-weight: 700;">Read-Only</span>
+        </div>
+        <div class="ai-drawer-sublabel" style="font-size: 11.5px; color: var(--text-subtle); margin-top: 3px;">
+          Read-only • Grounded in accounting data
+        </div>
       </div>
       <button class="btn-close" id="btnCloseAI">&times;</button>
     </div>
 
-    <div class="ai-security-banner">
-      <span>🛡️</span>
-      <span><strong>Strict Read-Only Boundary:</strong> The Copilot cannot alter invoices, post journal entries, or mutate ledger balances. Grounded strictly in live accounting records.</span>
+    <!-- Drawer Mutation Guard Banner -->
+    <div class="mutation-shield-banner drawer-shield">
+      <div class="shield-icon">🛡️</div>
+      <div class="shield-content">
+        <strong>Strict Read-Only Guard:</strong> Cannot mutate database or records.
+      </div>
+    </div>
+
+    <!-- Drawer Disabled Mode Banner -->
+    <div class="ai-disabled-banner drawer-disabled" id="aiDrawerDisabledBanner" style="display:none;">
+      <span>ℹ️</span>
+      <span>AI Copilot is currently disabled. Core accounting features continue to work normally.</span>
     </div>
 
     <div class="ai-chat-thread" id="aiChatThread">
@@ -693,12 +724,14 @@
     </div>
 
     <div class="ai-suggestions">
-      <div class="suggestion-label">Quick Financial Questions:</div>
+      <div class="suggestion-label">Example Grounded Inquiries:</div>
       <div class="suggestion-chips">
-        <button class="suggestion-chip" data-question="Why is invoice INV-0001 amount ₹11,800?">Why is invoice INV-0001 ₹11,800?</button>
-        <button class="suggestion-chip" data-question="Does my trial balance balance right now?">Does my trial balance balance?</button>
-        <button class="suggestion-chip" data-question="How much CGST and SGST did I collect today?">How much GST did I collect?</button>
-        <button class="suggestion-chip" data-question="Show me all unpaid invoices.">Show unpaid invoices</button>
+        <button class="suggestion-chip drawer-chip" data-question="Why is invoice INV-0001 ₹11,800?">Why is invoice INV-0001 ₹11,800?</button>
+        <button class="suggestion-chip drawer-chip" data-question="How much CGST and SGST did I collect?">How much CGST & SGST collected?</button>
+        <button class="suggestion-chip drawer-chip" data-question="Which invoices are still unpaid?">Which invoices are unpaid?</button>
+        <button class="suggestion-chip drawer-chip" data-question="Explain this journal entry.">Explain this journal entry</button>
+        <button class="suggestion-chip drawer-chip" data-question="Does my Trial Balance balance?">Does Trial Balance balance?</button>
+        <button class="suggestion-chip drawer-chip" data-question="Summarize today's sales and payments.">Summarize sales & payments</button>
       </div>
     </div>
 

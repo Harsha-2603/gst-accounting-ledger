@@ -2014,7 +2014,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // --- AI Accounting Copilot Controller ---
+  // --- AI Accounting Copilot Controller (Strictly Read-Only) ---
+  let isAILoading = false;
+
+  window.appOpenJournalVoucher = function(voucherNum) {
+    navigate('journal');
+    const input = document.getElementById('journalSearchInput');
+    if (input && voucherNum) {
+      input.value = voucherNum;
+      loadTransactions();
+    }
+  };
+
   function openAIDrawer() {
     aiDrawer.classList.add('active');
     aiDrawerOverlay.classList.add('active');
@@ -2030,7 +2041,7 @@ document.addEventListener('DOMContentLoaded', () => {
   btnCloseAI?.addEventListener('click', closeAIDrawer);
   aiDrawerOverlay?.addEventListener('click', closeAIDrawer);
 
-  // Shortcut Ctrl+K
+  // Keyboard Shortcut: Ctrl+K or Cmd+K
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
@@ -2042,55 +2053,94 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Clear Chat History
+  document.getElementById('btnClearPageAIChat')?.addEventListener('click', () => {
+    state.aiMessages = [
+      {
+        sender: 'assistant',
+        text: 'Hello! I am your AI Accounting Copilot. I provide read-only financial explanations grounded strictly in your live double-entry ledger. How can I help you today?',
+        sources: [],
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }
+    ];
+    renderAIChat();
+    ui.showToast('Copilot conversation thread cleared.', 'info');
+  });
+
+  // Send AI Message Controller
   async function handleSendAIMessage(queryText) {
     const aiPageInput = document.getElementById('aiPageInput');
     const text = (queryText || aiInput.value || (aiPageInput ? aiPageInput.value : '')).trim();
-    if (!text) return;
+    if (!text || isAILoading) return;
 
     aiInput.value = '';
     if (aiPageInput) aiPageInput.value = '';
 
-    state.aiMessages.push({ sender: 'user', text, sources: [] });
-    renderAIChat();
+    const userTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    const loadingMsg = { sender: 'assistant', text: 'Analyzing double-entry ledger records...', sources: [] };
-    state.aiMessages.push(loadingMsg);
+    // 1. User Message Added to State
+    state.aiMessages.push({
+      sender: 'user',
+      text,
+      sources: [],
+      timestamp: userTime
+    });
+
+    isAILoading = true;
     renderAIChat();
 
     try {
+      // 2. Call strictly POST /api/ai/copilot — NEVER call mutation endpoints
       const response = await api.askCopilot(text);
-      state.aiMessages.pop();
+      isAILoading = false;
+
+      const isRefusal = (response.sources && response.sources.includes('security:read_only_invariant')) ||
+                        response.answer.toLowerCase().includes('strictly read-only') ||
+                        response.answer.toLowerCase().includes('cannot create, modify, or delete');
+
+      // Disabled mode UI notification
+      if (response.aiEnabled === false) {
+        const pBanner = document.getElementById('aiPageDisabledBanner');
+        const dBanner = document.getElementById('aiDrawerDisabledBanner');
+        if (pBanner) pBanner.style.display = 'flex';
+        if (dBanner) dBanner.style.display = 'flex';
+      }
 
       state.aiMessages.push({
         sender: 'assistant',
         text: response.answer,
         sources: response.sources || [],
-        aiEnabled: response.aiEnabled
+        aiEnabled: response.aiEnabled,
+        isMutationRefusal: isRefusal,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       });
     } catch (err) {
-      state.aiMessages.pop();
+      isAILoading = false;
+      const isProviderFailure = err.statusCode === 503 ||
+                                (err.error && err.error.includes('AI_PROVIDER_UNAVAILABLE')) ||
+                                err.message.toLowerCase().includes('unavailable') ||
+                                err.message.toLowerCase().includes('timed out');
+
       state.aiMessages.push({
         sender: 'assistant',
-        text: `Notice: ${err.message}. Underlying accounting books remain fully secure and operational.`,
-        sources: ['copilot_service']
+        text: isProviderFailure
+          ? 'AI Copilot provider is temporarily unavailable or timed out. Your underlying accounting data is safe and fully operational.'
+          : `Notice: ${err.message}. Underlying double-entry accounting records remain 100% secure and unaffected.`,
+        sources: isProviderFailure ? ['system:resilience_fallback', 'service:status_503'] : ['system:error'],
+        isError: true,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       });
     }
 
     renderAIChat();
   }
 
+  // Input Listeners
   btnSendAI?.addEventListener('click', () => handleSendAIMessage());
   aiInput?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') handleSendAIMessage();
   });
 
-  suggestionChips.forEach(chip => {
-    chip.addEventListener('click', () => {
-      handleSendAIMessage(chip.dataset.question);
-    });
-  });
-
-  // Full-page AI View Listeners
   const btnSendPageAI = document.getElementById('btnSendPageAI');
   const aiPageInput = document.getElementById('aiPageInput');
   btnSendPageAI?.addEventListener('click', () => handleSendAIMessage());
@@ -2098,12 +2148,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') handleSendAIMessage();
   });
 
-  document.querySelectorAll('.page-chip').forEach(chip => {
+  // Suggestion Quick Query Chips
+  document.querySelectorAll('.suggestion-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       handleSendAIMessage(chip.dataset.question);
     });
   });
 
+  // Render Chat Messages and Citations
   function renderAIChat() {
     const threads = [
       document.getElementById('aiChatThread'),
@@ -2112,23 +2164,78 @@ document.addEventListener('DOMContentLoaded', () => {
 
     threads.forEach(thread => {
       thread.innerHTML = '';
+
       state.aiMessages.forEach(msg => {
         const bubble = document.createElement('div');
-        const isMutationWarning = msg.text.includes('strictly read-only') || msg.text.includes('SECURITY WARNING');
-        bubble.className = `chat-bubble ${msg.sender} ${isMutationWarning ? 'mutation-warning' : ''}`;
+        const isUser = msg.sender === 'user';
+        let extraClasses = '';
+        if (msg.isMutationRefusal) extraClasses += ' mutation-refusal';
+        if (msg.isError) extraClasses += ' provider-error';
 
-        let content = `<div>${msg.text}</div>`;
-        if (msg.sources && msg.sources.length > 0) {
-          content += `<div class="sources-container">`;
-          msg.sources.forEach(src => {
-            content += `<span class="source-tag">📄 ${src}</span>`;
-          });
-          content += `</div>`;
+        bubble.className = `chat-bubble ${msg.sender}${extraClasses}`;
+
+        // Message Header
+        let headerHtml = `
+          <div class="ai-msg-header">
+            <span>${isUser ? '👤 You (Accountant)' : '✨ AI Accounting Copilot'}</span>
+            <span class="ai-timestamp">${msg.timestamp || ''}</span>
+          </div>
+        `;
+
+        // Refusal or Error Badge
+        let badgeHtml = '';
+        if (msg.isMutationRefusal) {
+          badgeHtml = `<div class="mutation-refusal-tag">🛡️ Controlled Refusal — Read-Only Invariant Enforced</div>`;
+        } else if (msg.isError) {
+          badgeHtml = `<div class="provider-error-tag">⚠️ Provider Fallback — Accounting Data Safe</div>`;
         }
 
-        bubble.innerHTML = content;
+        // Message Text
+        let contentHtml = `<div>${msg.text}</div>`;
+
+        // Interactive Source Document Citations
+        let sourcesHtml = '';
+        if (msg.sources && msg.sources.length > 0) {
+          sourcesHtml = `<div class="sources-container"><span class="sources-title">Verified Sources:</span>`;
+          msg.sources.forEach(src => {
+            if (src.startsWith('invoice:')) {
+              const invNum = src.split(':')[1];
+              sourcesHtml += `<span class="source-chip" onclick="window.appViewInvoiceDetails('${invNum}')" title="Click to inspect invoice ${invNum}">📄 Invoice: ${invNum} ↗</span>`;
+            } else if (src.startsWith('journal:')) {
+              const jvNum = src.split(':')[1];
+              sourcesHtml += `<span class="source-chip" onclick="window.appOpenJournalVoucher('${jvNum}')" title="Click to view journal voucher ${jvNum}">📜 Voucher: ${jvNum} ↗</span>`;
+            } else if (src === 'report:trial-balance') {
+              sourcesHtml += `<span class="source-chip" onclick="window.appNavigate('trial-balance')" title="Click to view live Trial Balance Sheet">⚖️ Report: Trial Balance ↗</span>`;
+            } else if (src === 'report:gstr-1') {
+              sourcesHtml += `<span class="source-chip" onclick="window.appNavigate('gstr1')" title="Click to inspect GSTR-1 Tax Return">📑 Report: GSTR-1 ↗</span>`;
+            } else if (src === 'security:read_only_invariant') {
+              sourcesHtml += `<span class="source-chip chip-security" title="Zero mutation invariant protected">🛡️ Security: Read-Only Invariant</span>`;
+            } else if (src === 'accounts_transactions') {
+              sourcesHtml += `<span class="source-chip" onclick="window.appNavigate('journal')" title="Click to inspect double-entry transactions">📜 General Ledger Postings ↗</span>`;
+            } else {
+              sourcesHtml += `<span class="source-chip" title="Referenced live accounting dataset">📊 ${src}</span>`;
+            }
+          });
+          sourcesHtml += `</div>`;
+        }
+
+        bubble.innerHTML = headerHtml + badgeHtml + contentHtml + sourcesHtml;
         thread.appendChild(bubble);
       });
+
+      // Animated Loading Indicator
+      if (isAILoading) {
+        const loader = document.createElement('div');
+        loader.className = 'ai-typing-indicator';
+        loader.innerHTML = `
+          <span class="typing-dot"></span>
+          <span class="typing-dot"></span>
+          <span class="typing-dot"></span>
+          <span style="font-size: 11.5px; color: var(--text-subtle); margin-left: 6px;">Analyzing live double-entry records...</span>
+        `;
+        thread.appendChild(loader);
+      }
+
       thread.scrollTop = thread.scrollHeight;
     });
   }
