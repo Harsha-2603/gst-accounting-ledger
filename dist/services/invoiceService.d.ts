@@ -13,7 +13,14 @@ export declare function createInvoice(data: CreateInvoiceDTO): any;
  * Voids an invoice by writing explicit reversing contra-entries while preserving audit log.
  */
 export declare function voidInvoice(invoiceId: string, reason?: string): any;
+/**
+ * Delivers a draft invoice and posts its double-entry journal vouchers to GL.
+ */
+export declare function deliverInvoice(invoiceId: string): any;
 export declare function getInvoices(filters?: {
     status?: string;
+    search?: string;
+    fromDate?: string;
+    toDate?: string;
 }): any[];
 export declare function getInvoiceById(id: string): any;

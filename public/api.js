@@ -176,6 +176,12 @@ class ApiClient {
     });
   }
 
+  deliverInvoice(id) {
+    return this.request(`/invoices/${id}/deliver`, {
+      method: 'POST'
+    });
+  }
+
   // Payments
   getPayments() {
     return this.request('/payments');

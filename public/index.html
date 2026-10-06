@@ -248,10 +248,56 @@
 
         <!-- 4. SALES INVOICES VIEW -->
         <section class="view-section" id="view-invoices">
+          <!-- Invoices KPI Summary Strip -->
+          <div class="invoice-stats-strip">
+            <div class="invoice-stat-card">
+              <span class="invoice-stat-label">Total B2B Invoices</span>
+              <span class="invoice-stat-value" id="invStatCount">0</span>
+            </div>
+            <div class="invoice-stat-card">
+              <span class="invoice-stat-label">Total Invoiced (Gross)</span>
+              <span class="invoice-stat-value" id="invStatTotal">₹0.00</span>
+            </div>
+            <div class="invoice-stat-card">
+              <span class="invoice-stat-label">Total Collected (Paid)</span>
+              <span class="invoice-stat-value" style="color: var(--emerald-500);" id="invStatPaid">₹0.00</span>
+            </div>
+            <div class="invoice-stat-card">
+              <span class="invoice-stat-label">Outstanding Receivables</span>
+              <span class="invoice-stat-value" style="color: var(--amber-500);" id="invStatDue">₹0.00</span>
+            </div>
+          </div>
+
+          <!-- Invoices Filter & Search Bar -->
+          <div class="invoice-filter-bar">
+            <div style="flex: 2; min-width: 220px;">
+              <input type="text" class="form-input" id="invSearchInput" placeholder="🔍 Search Invoice #, Customer, or GSTIN...">
+            </div>
+            <div style="flex: 1; min-width: 140px;">
+              <select class="form-select" id="invStatusFilter">
+                <option value="ALL">All Statuses</option>
+                <option value="DELIVERED">Delivered (Posted)</option>
+                <option value="DRAFT">Draft (Unposted)</option>
+                <option value="VOIDED">Voided (Reversed)</option>
+              </select>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 12px; color: var(--text-muted);">From:</span>
+              <input type="date" class="form-input" id="invDateFrom" style="width: auto; padding: 6px 10px; font-size: 12px;">
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 12px; color: var(--text-muted);">To:</span>
+              <input type="date" class="form-input" id="invDateTo" style="width: auto; padding: 6px 10px; font-size: 12px;">
+            </div>
+            <button class="btn btn-secondary btn-sm" id="btnFilterInvoices">Apply</button>
+            <button class="btn btn-secondary btn-sm" id="btnResetInvoices">Reset</button>
+            <button class="btn btn-primary btn-sm" id="btnOpenNewInvoiceFromList" style="margin-left: auto;">+ New Invoice</button>
+          </div>
+
           <div class="card">
             <div class="card-header">
               <div class="card-title">B2B Sales Invoices (State-Aware GST Bifurcation)</div>
-              <button class="btn btn-primary btn-sm" onclick="document.getElementById('modalInvoice').classList.add('active')">+ New Invoice</button>
+              <div style="font-size: 12px; color: var(--text-subtle);">Double-entry accrual postings committed automatically upon delivery</div>
             </div>
             <div class="table-responsive">
               <table class="data-table">
@@ -260,16 +306,18 @@
                     <th>Invoice #</th>
                     <th>Customer</th>
                     <th>Date</th>
-                    <th>Place of Supply</th>
-                    <th class="num">Taxable Subtotal</th>
-                    <th class="num">GST Breakdown & Total</th>
+                    <th>Due Date</th>
+                    <th class="num">Subtotal</th>
+                    <th class="num">GST Breakdown</th>
+                    <th class="num">Total</th>
+                    <th class="num">Paid</th>
                     <th class="num">Due Amount</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="invoicesTableBody">
-                  <tr><td colspan="9" style="text-align:center; padding: 32px;">Loading invoices...</td></tr>
+                  <tr><td colspan="11" style="text-align:center; padding: 32px;">Loading invoices...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -526,27 +574,41 @@
         <button class="btn-close btn-modal-close">&times;</button>
       </div>
       <div class="modal-body">
+        <!-- Error Alert Container -->
+        <div id="invoiceFormError" style="display:none; padding: 10px 14px; background: rgba(244, 63, 94, 0.15); border: 1px solid rgba(244, 63, 94, 0.4); border-radius: var(--radius-sm); color: #fecdd3; font-size: 12.5px; margin-bottom: 14px;"></div>
+
         <div class="form-row">
           <div class="form-group" style="flex: 2;">
-            <label class="form-label">Customer (Debtor)</label>
-            <select class="form-select" id="invoiceCustomerSelect">
+            <label class="form-label">Customer (Debtor) *</label>
+            <select class="form-select" id="invoiceCustomerSelect" required>
               <option value="">-- Choose Customer --</option>
             </select>
           </div>
+          <div class="form-group" style="flex: 1.2;">
+            <label class="form-label">Invoice Number</label>
+            <input type="text" class="form-input" id="invoiceNumberInput" placeholder="Auto-generated if empty">
+          </div>
+        </div>
+
+        <div class="form-row">
           <div class="form-group" style="flex: 1;">
-            <label class="form-label">Invoice Date</label>
-            <input type="date" class="form-input" id="invoiceDateInput">
+            <label class="form-label">Invoice Date *</label>
+            <input type="date" class="form-input" id="invoiceDateInput" required>
           </div>
           <div class="form-group" style="flex: 1;">
+            <label class="form-label">Due Date *</label>
+            <input type="date" class="form-input" id="invoiceDueDateInput" required>
+          </div>
+          <div class="form-group" style="flex: 1.2;">
             <label class="form-label">Place of Supply Rule</label>
-            <div id="placeOfSupplyBadge" class="badge badge-delivered" style="padding: 10px; width: 100%; text-align: center;">
+            <div id="placeOfSupplyBadge" class="badge badge-delivered" style="padding: 10px; width: 100%; text-align: center; height: 38px; display: flex; align-items: center; justify-content: center;">
               Intra-State (50/50 Split)
             </div>
           </div>
         </div>
 
         <div style="margin: 16px 0 10px; display: flex; justify-content: space-between; align-items: center;">
-          <label class="form-label" style="margin:0;">Invoice Line Items (HSN & Dual-Split Tax)</label>
+          <label class="form-label" style="margin:0;">Invoice Line Items (HSN & Dual-Split Tax) *</label>
           <button type="button" class="btn btn-secondary btn-sm" id="btnAddLineItem">+ Add Item</button>
         </div>
 
@@ -557,22 +619,22 @@
         <!-- Estimated Display Preview -->
         <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 14px; margin-top: 16px;">
           <div style="font-size: 11px; text-transform: uppercase; color: var(--text-subtle); font-weight: 600; margin-bottom: 8px;">
-            Display Preview (Final taxes posted by backend engine upon delivery)
+            Display Preview (Final taxes & GL lines posted authoritatively by backend accounting engine)
           </div>
           <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
             <span style="color: var(--text-muted);">Taxable Subtotal:</span>
             <strong id="previewSubtotal">₹0.00</strong>
           </div>
           <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
-            <span style="color: var(--text-muted);">Central GST (CGST 50%):</span>
+            <span style="color: var(--text-muted);">Central GST (CGST):</span>
             <span id="previewCGST">₹0.00</span>
           </div>
           <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
-            <span style="color: var(--text-muted);">State GST (SGST 50%):</span>
+            <span style="color: var(--text-muted);">State GST (SGST):</span>
             <span id="previewSGST">₹0.00</span>
           </div>
           <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;">
-            <span style="color: var(--text-muted);">Integrated GST (IGST 100%):</span>
+            <span style="color: var(--text-muted);">Integrated GST (IGST):</span>
             <span id="previewIGST">₹0.00</span>
           </div>
           <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; border-top: 1px solid var(--border-subtle); padding-top: 8px;">
@@ -590,7 +652,218 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary btn-modal-close">Cancel</button>
-        <button class="btn btn-primary" id="btnSubmitInvoice">Issue & Post Invoice</button>
+        <button class="btn btn-secondary" id="btnSaveDraftInvoice">Save as Draft</button>
+        <button class="btn btn-primary" id="btnSubmitInvoice">Issue & Deliver Invoice</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: INVOICE DETAILS (READABLE DETAIL VIEW) -->
+  <div class="modal-overlay" id="modalInvoiceDetails">
+    <div class="modal-dialog" style="max-width: 920px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <h2 class="modal-title" id="detInvoiceNum">Invoice INV-0001</h2>
+          <span id="detInvoiceStatusBadge"></span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="btn btn-danger btn-sm" id="btnDetVoidInvoice" style="display:none;">Void Invoice</button>
+          <button class="btn btn-primary btn-sm" id="btnDetDeliverInvoice" style="display:none;">Deliver Invoice</button>
+          <button class="btn-close btn-modal-close">&times;</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <!-- Metadata & Customer Grid -->
+        <div class="invoice-details-grid">
+          <div class="invoice-detail-card">
+            <div class="invoice-detail-card-title">Customer Information</div>
+            <div class="invoice-detail-row">
+              <span>Customer Name:</span>
+              <span id="detCustomerName">-</span>
+            </div>
+            <div class="invoice-detail-row">
+              <span>GSTIN:</span>
+              <span id="detCustomerGstin">-</span>
+            </div>
+            <div class="invoice-detail-row">
+              <span>Place of Supply:</span>
+              <span id="detCustomerPos">-</span>
+            </div>
+          </div>
+
+          <div class="invoice-detail-card">
+            <div class="invoice-detail-card-title">Invoice & Accounting Metadata</div>
+            <div class="invoice-detail-row">
+              <span>Invoice Date:</span>
+              <span id="detInvoiceDate">-</span>
+            </div>
+            <div class="invoice-detail-row">
+              <span>Due Date:</span>
+              <span id="detInvoiceDueDate">-</span>
+            </div>
+            <div class="invoice-detail-row">
+              <span>GL Journal Voucher:</span>
+              <span id="detJournalRef">Not Posted (Draft)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Line Items Table -->
+        <div style="margin-bottom: 20px;">
+          <div style="font-size: 13px; font-weight: 700; color: var(--text-main); margin-bottom: 8px;">Invoice Line Items & GST Rates</div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Item / Description</th>
+                  <th>HSN/SAC</th>
+                  <th class="num">Qty</th>
+                  <th class="num">Unit Price</th>
+                  <th class="num">Taxable Amt</th>
+                  <th class="num">GST Rate</th>
+                  <th class="num">CGST</th>
+                  <th class="num">SGST</th>
+                  <th class="num">IGST</th>
+                  <th class="num">Line Total</th>
+                </tr>
+              </thead>
+              <tbody id="detLinesBody">
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Summary & Totals -->
+        <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 24px;">
+          <div style="flex: 1; min-width: 260px; background: rgba(0,0,0,0.25); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 16px;">
+            <div style="font-size: 11px; text-transform: uppercase; color: var(--text-subtle); font-weight: 700; margin-bottom: 10px;">Payment & Receivables State</div>
+            <div class="invoice-detail-row">
+              <span>Total Billed:</span>
+              <strong id="detSummaryTotal">₹0.00</strong>
+            </div>
+            <div class="invoice-detail-row">
+              <span>Total Paid Remittances:</span>
+              <span id="detSummaryPaid" style="color: var(--emerald-500);">₹0.00</span>
+            </div>
+            <div class="invoice-detail-row" style="border-top: 1px solid var(--border-subtle); padding-top: 8px; margin-top: 6px;">
+              <span>Current Outstanding Due:</span>
+              <strong id="detSummaryDue" style="color: var(--amber-500); font-size: 16px;">₹0.00</strong>
+            </div>
+          </div>
+
+          <div style="flex: 1; min-width: 260px; background: rgba(0,0,0,0.25); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 16px;">
+            <div style="font-size: 11px; text-transform: uppercase; color: var(--text-subtle); font-weight: 700; margin-bottom: 10px;">Authoritative GST Breakdown</div>
+            <div class="invoice-detail-row">
+              <span>Taxable Subtotal:</span>
+              <span id="detBreakdownSubtotal">₹0.00</span>
+            </div>
+            <div class="invoice-detail-row">
+              <span>Output CGST:</span>
+              <span id="detBreakdownCGST">₹0.00</span>
+            </div>
+            <div class="invoice-detail-row">
+              <span>Output SGST:</span>
+              <span id="detBreakdownSGST">₹0.00</span>
+            </div>
+            <div class="invoice-detail-row">
+              <span>Output IGST:</span>
+              <span id="detBreakdownIGST">₹0.00</span>
+            </div>
+            <div class="invoice-detail-row" style="border-top: 1px solid var(--border-subtle); padding-top: 8px; margin-top: 6px;">
+              <span>Grand Total:</span>
+              <strong id="detBreakdownTotal" style="color: var(--emerald-500); font-size: 16px;">₹0.00</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Double-Entry Audit Trail for this Invoice -->
+        <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+            <div style="font-size: 13px; font-weight: 700; color: var(--text-main);">
+              ⚖️ Double-Entry General Ledger Postings (Audit Trail)
+            </div>
+            <div style="font-size: 11px; color: var(--text-subtle);">
+              Zero-Trust Balanced Invariant Certified
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Voucher #</th>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Account</th>
+                  <th>Description</th>
+                  <th class="num">Debit (₹)</th>
+                  <th class="num">Credit (₹)</th>
+                </tr>
+              </thead>
+              <tbody id="detJournalBody">
+                <tr><td colspan="7" style="text-align:center; padding: 12px; color: var(--text-subtle);">No ledger transactions recorded yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-modal-close">Close Details</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: INVOICE CREATION SUCCESS RECEIPT -->
+  <div class="modal-overlay" id="modalInvoiceSuccess">
+    <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-header">
+        <h2 class="modal-title" style="color: var(--emerald-500);">✓ Invoice Created Successfully</h2>
+        <button class="btn-close btn-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="invoice-success-banner">
+          <div style="font-size: 32px; margin-bottom: 6px;">🎉</div>
+          <div style="font-size: 17px; font-weight: 700; color: var(--text-main); margin-bottom: 4px;" id="successInvNum">INV-0001</div>
+          <div style="font-size: 12.5px; color: #a7f3d0;" id="successInvMsg">Delivered & posted to double-entry ledger.</div>
+        </div>
+
+        <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 16px;">
+          <div class="invoice-detail-row">
+            <span>Customer:</span>
+            <span id="successInvCustomer">-</span>
+          </div>
+          <div class="invoice-detail-row">
+            <span>Taxable Subtotal:</span>
+            <span id="successInvSubtotal">₹0.00</span>
+          </div>
+          <div class="invoice-detail-row">
+            <span>CGST Amount:</span>
+            <span id="successInvCGST">₹0.00</span>
+          </div>
+          <div class="invoice-detail-row">
+            <span>SGST Amount:</span>
+            <span id="successInvSGST">₹0.00</span>
+          </div>
+          <div class="invoice-detail-row">
+            <span>IGST Amount:</span>
+            <span id="successInvIGST">₹0.00</span>
+          </div>
+          <div class="invoice-detail-row" style="border-top: 1px solid var(--border-subtle); padding-top: 8px; margin-top: 6px;">
+            <span>Grand Total:</span>
+            <strong id="successInvTotal" style="color: var(--emerald-500);">₹0.00</strong>
+          </div>
+          <div class="invoice-detail-row">
+            <span>Amount Due:</span>
+            <strong id="successInvDue" style="color: var(--amber-500);">₹0.00</strong>
+          </div>
+          <div class="invoice-detail-row" style="border-top: 1px solid var(--border-subtle); padding-top: 8px; margin-top: 6px;">
+            <span>Journal Entry:</span>
+            <span id="successInvJournal" class="badge badge-delivered">JV-0001</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-modal-close">Close</button>
+        <button class="btn btn-primary" id="btnSuccessViewDetails">View Full Invoice Details →</button>
       </div>
     </div>
   </div>

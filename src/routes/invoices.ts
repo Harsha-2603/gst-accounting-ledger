@@ -26,6 +26,16 @@ router.post('/:id/void', (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
+router.post('/:id/deliver', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id as string;
+    const result = invoiceService.deliverInvoice(id);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/', (req: Request, res: Response, next: NextFunction) => {
   try {
     const invoices = invoiceService.getInvoices(req.query as any);

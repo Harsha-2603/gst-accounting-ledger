@@ -252,7 +252,103 @@ export function voidInvoice(invoiceId: string, reason = 'Customer cancellation')
   return txn();
 }
 
-export function getInvoices(filters: { status?: string } = {}): any[] {
+/**
+ * Delivers a draft invoice and posts its double-entry journal vouchers to GL.
+ */
+export function deliverInvoice(invoiceId: string): any {
+  const invoice = db.prepare('SELECT * FROM invoices WHERE id = ? OR invoice_number = ?').get(invoiceId, invoiceId) as any;
+
+  if (!invoice) {
+    throw new NotFoundError(`Invoice '${invoiceId}' not found.`);
+  }
+
+  if (invoice.status === 'DELIVERED') {
+    throw new BadRequestError(`Invoice '${invoice.invoice_number}' is already delivered.`);
+  }
+
+  if (invoice.status === 'VOIDED') {
+    throw new BadRequestError(`Cannot deliver voided invoice '${invoice.invoice_number}'.`);
+  }
+
+  const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(invoice.customer_id) as any;
+  const now = new Date().toISOString();
+
+  const executeDeliver = () => {
+    const arAcc = db.prepare("SELECT id FROM accounts WHERE code = '1200'").get() as any;
+    const salesAcc = db.prepare("SELECT id FROM accounts WHERE code = '4000'").get() as any;
+    const cgstAcc = db.prepare("SELECT id FROM accounts WHERE code = '2110'").get() as any;
+    const sgstAcc = db.prepare("SELECT id FROM accounts WHERE code = '2120'").get() as any;
+    const igstAcc = db.prepare("SELECT id FROM accounts WHERE code = '2130'").get() as any;
+
+    if (!arAcc || !salesAcc || !cgstAcc || !sgstAcc || !igstAcc) {
+      throw new Error('Default GST & Sales accounts (1200, 4000, 2110, 2120, 2130) not found in Chart of Accounts.');
+    }
+
+    const glLines: any[] = [
+      {
+        accountId: arAcc.id,
+        debit: invoice.total_amount,
+        credit: '0.0000',
+        description: `Accounts Receivable for Invoice ${invoice.invoice_number}`
+      },
+      {
+        accountId: salesAcc.id,
+        debit: '0.0000',
+        credit: invoice.subtotal,
+        description: `Sales Revenue for Invoice ${invoice.invoice_number}`
+      }
+    ];
+
+    if (toDec(invoice.cgst_amount).greaterThan(0)) {
+      glLines.push({
+        accountId: cgstAcc.id,
+        debit: '0.0000',
+        credit: invoice.cgst_amount,
+        description: `Output CGST Payable for Invoice ${invoice.invoice_number}`
+      });
+    }
+
+    if (toDec(invoice.sgst_amount).greaterThan(0)) {
+      glLines.push({
+        accountId: sgstAcc.id,
+        debit: '0.0000',
+        credit: invoice.sgst_amount,
+        description: `Output SGST Payable for Invoice ${invoice.invoice_number}`
+      });
+    }
+
+    if (toDec(invoice.igst_amount).greaterThan(0)) {
+      glLines.push({
+        accountId: igstAcc.id,
+        debit: '0.0000',
+        credit: invoice.igst_amount,
+        description: `Output IGST Payable for Invoice ${invoice.invoice_number}`
+      });
+    }
+
+    const postedJournal = ledgerService.postJournalEntry({
+      entryDate: invoice.invoice_date || now.slice(0, 10),
+      entryType: 'INVOICE',
+      referenceType: 'Invoice',
+      referenceId: invoice.id,
+      narration: `Sales Invoice ${invoice.invoice_number} delivered to ${customer ? customer.name : 'Customer'}`,
+      lines: glLines
+    });
+
+    db.prepare(`
+      UPDATE invoices
+      SET status = 'DELIVERED', journal_entry_id = ?
+      WHERE id = ?
+    `).run(postedJournal.id, invoice.id);
+
+    return getInvoiceById(invoice.id);
+  };
+
+  const txn = db.transaction(executeDeliver);
+  return txn();
+}
+
+export function getInvoices(filters: { status?: string; search?: string; fromDate?: string; toDate?: string } = {}): any[] {
   let query = `
     SELECT 
       i.id,
@@ -279,9 +375,25 @@ export function getInvoices(filters: { status?: string } = {}): any[] {
   `;
   const params: any[] = [];
 
-  if (filters.status) {
+  if (filters.status && filters.status !== 'ALL') {
     query += ` AND i.status = ?`;
     params.push(filters.status);
+  }
+
+  if (filters.search && filters.search.trim()) {
+    query += ` AND (i.invoice_number LIKE ? OR c.name LIKE ? OR c.gstin LIKE ?)`;
+    const s = `%${filters.search.trim()}%`;
+    params.push(s, s, s);
+  }
+
+  if (filters.fromDate) {
+    query += ` AND i.invoice_date >= ?`;
+    params.push(filters.fromDate);
+  }
+
+  if (filters.toDate) {
+    query += ` AND i.invoice_date <= ?`;
+    params.push(filters.toDate);
   }
 
   query += ` ORDER BY i.created_at DESC`;

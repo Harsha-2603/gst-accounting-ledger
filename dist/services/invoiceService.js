@@ -38,6 +38,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createInvoice = createInvoice;
 exports.voidInvoice = voidInvoice;
+exports.deliverInvoice = deliverInvoice;
 exports.getInvoices = getInvoices;
 exports.getInvoiceById = getInvoiceById;
 const database_1 = require("../database");
@@ -215,6 +216,87 @@ function voidInvoice(invoiceId, reason = 'Customer cancellation') {
     const txn = database_1.db.transaction(executeVoid);
     return txn();
 }
+/**
+ * Delivers a draft invoice and posts its double-entry journal vouchers to GL.
+ */
+function deliverInvoice(invoiceId) {
+    const invoice = database_1.db.prepare('SELECT * FROM invoices WHERE id = ? OR invoice_number = ?').get(invoiceId, invoiceId);
+    if (!invoice) {
+        throw new errors_1.NotFoundError(`Invoice '${invoiceId}' not found.`);
+    }
+    if (invoice.status === 'DELIVERED') {
+        throw new errors_1.BadRequestError(`Invoice '${invoice.invoice_number}' is already delivered.`);
+    }
+    if (invoice.status === 'VOIDED') {
+        throw new errors_1.BadRequestError(`Cannot deliver voided invoice '${invoice.invoice_number}'.`);
+    }
+    const customer = database_1.db.prepare('SELECT * FROM customers WHERE id = ?').get(invoice.customer_id);
+    const now = new Date().toISOString();
+    const executeDeliver = () => {
+        const arAcc = database_1.db.prepare("SELECT id FROM accounts WHERE code = '1200'").get();
+        const salesAcc = database_1.db.prepare("SELECT id FROM accounts WHERE code = '4000'").get();
+        const cgstAcc = database_1.db.prepare("SELECT id FROM accounts WHERE code = '2110'").get();
+        const sgstAcc = database_1.db.prepare("SELECT id FROM accounts WHERE code = '2120'").get();
+        const igstAcc = database_1.db.prepare("SELECT id FROM accounts WHERE code = '2130'").get();
+        if (!arAcc || !salesAcc || !cgstAcc || !sgstAcc || !igstAcc) {
+            throw new Error('Default GST & Sales accounts (1200, 4000, 2110, 2120, 2130) not found in Chart of Accounts.');
+        }
+        const glLines = [
+            {
+                accountId: arAcc.id,
+                debit: invoice.total_amount,
+                credit: '0.0000',
+                description: `Accounts Receivable for Invoice ${invoice.invoice_number}`
+            },
+            {
+                accountId: salesAcc.id,
+                debit: '0.0000',
+                credit: invoice.subtotal,
+                description: `Sales Revenue for Invoice ${invoice.invoice_number}`
+            }
+        ];
+        if ((0, decimal_1.toDec)(invoice.cgst_amount).greaterThan(0)) {
+            glLines.push({
+                accountId: cgstAcc.id,
+                debit: '0.0000',
+                credit: invoice.cgst_amount,
+                description: `Output CGST Payable for Invoice ${invoice.invoice_number}`
+            });
+        }
+        if ((0, decimal_1.toDec)(invoice.sgst_amount).greaterThan(0)) {
+            glLines.push({
+                accountId: sgstAcc.id,
+                debit: '0.0000',
+                credit: invoice.sgst_amount,
+                description: `Output SGST Payable for Invoice ${invoice.invoice_number}`
+            });
+        }
+        if ((0, decimal_1.toDec)(invoice.igst_amount).greaterThan(0)) {
+            glLines.push({
+                accountId: igstAcc.id,
+                debit: '0.0000',
+                credit: invoice.igst_amount,
+                description: `Output IGST Payable for Invoice ${invoice.invoice_number}`
+            });
+        }
+        const postedJournal = ledgerService.postJournalEntry({
+            entryDate: invoice.invoice_date || now.slice(0, 10),
+            entryType: 'INVOICE',
+            referenceType: 'Invoice',
+            referenceId: invoice.id,
+            narration: `Sales Invoice ${invoice.invoice_number} delivered to ${customer ? customer.name : 'Customer'}`,
+            lines: glLines
+        });
+        database_1.db.prepare(`
+      UPDATE invoices
+      SET status = 'DELIVERED', journal_entry_id = ?
+      WHERE id = ?
+    `).run(postedJournal.id, invoice.id);
+        return getInvoiceById(invoice.id);
+    };
+    const txn = database_1.db.transaction(executeDeliver);
+    return txn();
+}
 function getInvoices(filters = {}) {
     let query = `
     SELECT 
@@ -241,9 +323,22 @@ function getInvoices(filters = {}) {
     WHERE 1=1
   `;
     const params = [];
-    if (filters.status) {
+    if (filters.status && filters.status !== 'ALL') {
         query += ` AND i.status = ?`;
         params.push(filters.status);
+    }
+    if (filters.search && filters.search.trim()) {
+        query += ` AND (i.invoice_number LIKE ? OR c.name LIKE ? OR c.gstin LIKE ?)`;
+        const s = `%${filters.search.trim()}%`;
+        params.push(s, s, s);
+    }
+    if (filters.fromDate) {
+        query += ` AND i.invoice_date >= ?`;
+        params.push(filters.fromDate);
+    }
+    if (filters.toDate) {
+        query += ` AND i.invoice_date <= ?`;
+        params.push(filters.toDate);
     }
     query += ` ORDER BY i.created_at DESC`;
     const rows = database_1.db.prepare(query).all(...params);

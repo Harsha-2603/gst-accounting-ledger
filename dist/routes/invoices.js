@@ -59,6 +59,16 @@ router.post('/:id/void', (req, res, next) => {
         next(err);
     }
 });
+router.post('/:id/deliver', (req, res, next) => {
+    try {
+        const id = req.params.id;
+        const result = invoiceService.deliverInvoice(id);
+        res.status(200).json(result);
+    }
+    catch (err) {
+        next(err);
+    }
+});
 router.get('/', (req, res, next) => {
     try {
         const invoices = invoiceService.getInvoices(req.query);

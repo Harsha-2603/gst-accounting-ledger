@@ -342,50 +342,105 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // 5. Invoices
-  async function loadInvoices() {
+  async function loadInvoices(customFilters = null) {
     const tbody = document.getElementById('invoicesTableBody');
-    tbody.innerHTML = ui.renderSkeleton(5, 9);
+    if (!tbody) return;
+    tbody.innerHTML = ui.renderSkeleton(5, 11);
+
+    const searchInput = document.getElementById('invSearchInput');
+    const statusSelect = document.getElementById('invStatusFilter');
+    const fromInput = document.getElementById('invDateFrom');
+    const toInput = document.getElementById('invDateTo');
+
+    const filters = customFilters || {
+      search: searchInput ? searchInput.value.trim() : '',
+      status: statusSelect ? statusSelect.value : 'ALL',
+      fromDate: fromInput ? fromInput.value : '',
+      toDate: toInput ? toInput.value : ''
+    };
 
     try {
-      const invoices = await api.getInvoices();
+      const invoices = await api.getInvoices(filters);
       state.invoices = invoices;
       tbody.innerHTML = '';
 
+      // Update KPI Summary Strip
+      let grossTotal = 0;
+      let grossPaid = 0;
+      let grossDue = 0;
+      invoices.forEach(inv => {
+        if (inv.status !== 'VOIDED') {
+          grossTotal += (inv.totalAmount || 0);
+          grossPaid += (inv.paidAmount || 0);
+          grossDue += (inv.dueAmount || 0);
+        }
+      });
+
+      const statCount = document.getElementById('invStatCount');
+      const statTotal = document.getElementById('invStatTotal');
+      const statPaid = document.getElementById('invStatPaid');
+      const statDue = document.getElementById('invStatDue');
+
+      if (statCount) statCount.textContent = invoices.length;
+      if (statTotal) statTotal.textContent = ui.formatINR(grossTotal);
+      if (statPaid) statPaid.textContent = ui.formatINR(grossPaid);
+      if (statDue) statDue.textContent = ui.formatINR(grossDue);
+
       if (invoices.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9">${ui.renderEmptyState({ icon: '📄', title: 'No invoices generated', description: 'Create and deliver a B2B sales invoice to post double-entry vouchers.', actionHtml: '<button class="btn btn-primary btn-sm" onclick="document.getElementById(\'modalInvoice\').classList.add(\'active\')">+ Create Invoice</button>' })}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11">${ui.renderEmptyState({ 
+          icon: '📄', 
+          title: 'No invoices found', 
+          description: filters.search || (filters.status && filters.status !== 'ALL') || filters.fromDate || filters.toDate 
+            ? 'No invoices match the applied search and filter criteria.' 
+            : 'Create your first B2B sales invoice with automated Indian GST calculation.', 
+          actionHtml: '<button class="btn btn-primary btn-sm" onclick="window.appOpenCreateInvoice()">+ Create Invoice</button>' 
+        })}</td></tr>`;
         return;
       }
 
       invoices.forEach(inv => {
         const isIntra = inv.placeOfSupply === '27';
         const gstSummary = isIntra
-          ? `CGST: ${ui.formatINR(inv.cgstAmount)} | SGST: ${ui.formatINR(inv.sgstAmount)}`
-          : `IGST: ${ui.formatINR(inv.igstAmount)}`;
+          ? `<span class="badge badge-state">CGST: ${ui.formatINR(inv.cgstAmount)}</span><br><span class="badge badge-state" style="margin-top:2px;">SGST: ${ui.formatINR(inv.sgstAmount)}</span>`
+          : `<span class="badge badge-reversal">IGST: ${ui.formatINR(inv.igstAmount)}</span>`;
 
         tbody.innerHTML += `
           <tr>
-            <td><strong>${inv.invoiceNumber}</strong></td>
-            <td>${inv.customerName}</td>
+            <td>
+              <a href="javascript:void(0)" onclick="window.appViewInvoiceDetails('${inv.id}')" style="font-weight:700; color:var(--primary-400); text-decoration:none;" title="Click to view full details">
+                ${inv.invoiceNumber}
+              </a>
+            </td>
+            <td>
+              <strong>${inv.customerName}</strong>
+              ${inv.customerGstin ? `<br><small style="color:var(--text-subtle); font-family:var(--font-mono);">${inv.customerGstin}</small>` : ''}
+            </td>
             <td>${ui.formatDate(inv.invoiceDate)}</td>
-            <td><span class="badge badge-state">${inv.placeOfSupply} (${isIntra ? 'Intra' : 'Inter'})</span></td>
+            <td>${ui.formatDate(inv.dueDate || inv.invoiceDate)}</td>
             <td class="num">${ui.formatINR(inv.subtotal)}</td>
-            <td class="num"><small style="color:var(--text-muted);">${gstSummary}</small><br><strong>${ui.formatINR(inv.totalAmount)}</strong></td>
-            <td class="num" style="color:${inv.dueAmount > 0 ? 'var(--amber-500)' : 'var(--emerald-500)'}">${ui.formatINR(inv.dueAmount)}</td>
+            <td class="num">${gstSummary}</td>
+            <td class="num"><strong>${ui.formatINR(inv.totalAmount)}</strong></td>
+            <td class="num" style="color:var(--emerald-500);">${ui.formatINR(inv.paidAmount || 0)}</td>
+            <td class="num" style="color:${inv.dueAmount > 0 ? 'var(--amber-500)' : 'var(--emerald-500)'}; font-weight:700;">
+              ${ui.formatINR(inv.dueAmount || 0)}
+            </td>
             <td>${ui.renderBadge(inv.status)}</td>
             <td>
-              ${inv.status === 'DELIVERED' && inv.paidAmount === 0 ? `
-                <button class="btn btn-danger btn-sm" onclick="window.appVoidInvoice('${inv.id}', '${inv.invoiceNumber}')">Void</button>
-              ` : inv.status === 'DELIVERED' ? `
-                <span style="font-size:11px; color:var(--text-subtle);">Payment attached</span>
-              ` : `
-                <span style="font-size:11px; color:var(--text-subtle);">-</span>
-              `}
+              <div style="display:flex; gap:4px; justify-content:flex-end;">
+                <button class="btn btn-secondary btn-sm" onclick="window.appViewInvoiceDetails('${inv.id}')" title="View invoice details and GL journal entries">View</button>
+                ${inv.status === 'DELIVERED' && (inv.paidAmount === 0 || !inv.paidAmount) ? `
+                  <button class="btn btn-danger btn-sm" onclick="window.appVoidInvoice('${inv.id}', '${inv.invoiceNumber}')" title="Void invoice with immutable reversal">Void</button>
+                ` : ''}
+                ${inv.status === 'DRAFT' ? `
+                  <button class="btn btn-primary btn-sm" onclick="window.appDeliverInvoice('${inv.id}')" title="Deliver draft invoice & post GL vouchers">Deliver</button>
+                ` : ''}
+              </div>
             </td>
           </tr>
         `;
       });
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="9">${ui.renderErrorState(err.message, 'loadInvoices')}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11">${ui.renderErrorState(err.message, 'loadInvoices')}</td></tr>`;
     }
   }
 
@@ -634,64 +689,75 @@ document.addEventListener('DOMContentLoaded', () => {
     lineRow.style.marginBottom = '10px';
     lineRow.style.border = '1px solid var(--border-subtle)';
 
-    let itemOptions = '';
+    let itemOptions = '<option value="">-- Custom Item / Description --</option>';
     state.items.forEach(it => {
       itemOptions += `<option value="${it.id}" data-price="${it.unitPrice}" data-tax="${it.defaultTaxRate}" data-hsn="${it.hsnCode}">${it.name} (HSN: ${it.hsnCode})</option>`;
     });
 
+    const defaultItem = state.items[0];
+
     lineRow.innerHTML = `
-      <div style="flex: 2;">
-        <label class="form-label">Item / Product</label>
-        <select class="form-select line-item-select">
-          ${itemOptions}
-        </select>
+      <div style="flex: 2; min-width: 160px;">
+        <label class="form-label">Item / Description *</label>
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <select class="form-select line-item-select" style="font-size:12px;">
+            ${itemOptions}
+          </select>
+          <input type="text" class="form-input line-desc" placeholder="Item description" value="${defaultItem?.name || 'General Wholesale Goods'}" required>
+        </div>
       </div>
-      <div style="flex: 1;">
-        <label class="form-label">HSN Code</label>
-        <input type="text" class="form-input line-hsn" value="${state.items[0]?.hsnCode || '8471'}" readonly>
+      <div style="flex: 1; min-width: 90px;">
+        <label class="form-label">HSN/SAC *</label>
+        <input type="text" class="form-input line-hsn" placeholder="e.g. 8471" value="${defaultItem?.hsnCode || '8471'}" required>
       </div>
-      <div style="flex: 1;">
-        <label class="form-label">Quantity</label>
-        <input type="number" class="form-input line-qty" value="1" min="1" step="1">
+      <div style="flex: 0.8; min-width: 70px;">
+        <label class="form-label">Qty *</label>
+        <input type="number" class="form-input line-qty" value="1" min="1" step="1" required>
       </div>
-      <div style="flex: 1.5;">
-        <label class="form-label">Rate (₹)</label>
-        <input type="number" class="form-input line-price" value="${state.items[0]?.unitPrice || 50000}" min="0" step="0.01">
+      <div style="flex: 1.2; min-width: 100px;">
+        <label class="form-label">Unit Price (₹) *</label>
+        <input type="number" class="form-input line-price" value="${defaultItem?.unitPrice || 50000}" min="0" step="0.01" required>
       </div>
-      <div style="flex: 1;">
-        <label class="form-label">GST %</label>
+      <div style="flex: 1; min-width: 90px;">
+        <label class="form-label">GST Rate *</label>
         <select class="form-select line-tax">
-          <option value="18">18%</option>
-          <option value="12">12%</option>
-          <option value="5">5%</option>
-          <option value="28">28%</option>
-          <option value="0">0%</option>
+          <option value="18" ${defaultItem?.defaultTaxRate === 18 ? 'selected' : ''}>18% (Standard)</option>
+          <option value="12" ${defaultItem?.defaultTaxRate === 12 ? 'selected' : ''}>12%</option>
+          <option value="5" ${defaultItem?.defaultTaxRate === 5 ? 'selected' : ''}>5%</option>
+          <option value="28" ${defaultItem?.defaultTaxRate === 28 ? 'selected' : ''}>28% (Luxury)</option>
+          <option value="0" ${defaultItem?.defaultTaxRate === 0 ? 'selected' : ''}>0% (Nil)</option>
         </select>
       </div>
-      <div style="display:flex; align-items:flex-end;">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="this.closest('.invoice-line-item').remove(); window.appRecalculateInvoicePreview();">✕</button>
+      <div style="display:flex; align-items:flex-end; padding-bottom: 2px;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="this.closest('.invoice-line-item').remove(); window.appRecalculateInvoicePreview();" title="Remove line item">✕</button>
       </div>
     `;
 
     container.appendChild(lineRow);
 
     const select = lineRow.querySelector('.line-item-select');
+    const descInput = lineRow.querySelector('.line-desc');
     const hsnInput = lineRow.querySelector('.line-hsn');
     const priceInput = lineRow.querySelector('.line-price');
     const taxSelect = lineRow.querySelector('.line-tax');
     const qtyInput = lineRow.querySelector('.line-qty');
 
+    if (defaultItem) {
+      select.value = defaultItem.id;
+    }
+
     select.addEventListener('change', () => {
       const opt = select.selectedOptions[0];
-      if (opt) {
+      if (opt && opt.value) {
+        descInput.value = opt.text.split(' (HSN:')[0];
         priceInput.value = opt.dataset.price || 0;
         taxSelect.value = opt.dataset.tax || 18;
         hsnInput.value = opt.dataset.hsn || '8471';
-        recalculateInvoicePreview();
       }
+      recalculateInvoicePreview();
     });
 
-    [priceInput, taxSelect, qtyInput].forEach(inp => {
+    [descInput, hsnInput, priceInput, taxSelect, qtyInput].forEach(inp => {
       inp.addEventListener('input', recalculateInvoicePreview);
     });
 
@@ -702,24 +768,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('invoiceCustomerSelect')?.addEventListener('change', () => {
     const custOpt = document.getElementById('invoiceCustomerSelect').selectedOptions[0];
-    const customerState = custOpt ? custOpt.dataset.state : '27';
-    const isIntra = customerState === '27';
+    const customerState = custOpt ? (custOpt.dataset.state || '27') : '27';
+    const isIntra = String(customerState).trim() === '27';
 
     const posBadge = document.getElementById('placeOfSupplyBadge');
-    if (isIntra) {
-      posBadge.className = 'badge badge-delivered';
-      posBadge.textContent = 'Intra-State (50/50 Dual Split)';
-    } else {
-      posBadge.className = 'badge badge-reversal';
-      posBadge.textContent = 'Inter-State (100% IGST Allocation)';
+    if (posBadge) {
+      if (isIntra) {
+        posBadge.className = 'badge badge-delivered';
+        posBadge.textContent = 'Intra-State (50/50 Dual Split)';
+      } else {
+        posBadge.className = 'badge badge-reversal';
+        posBadge.textContent = `Inter-State (${customerState} - 100% IGST)`;
+      }
     }
     recalculateInvoicePreview();
   });
 
   function recalculateInvoicePreview() {
     const custOpt = document.getElementById('invoiceCustomerSelect')?.selectedOptions[0];
-    const customerState = custOpt ? custOpt.dataset.state : '27';
-    const isIntra = customerState === '27';
+    const customerState = custOpt ? (custOpt.dataset.state || '27') : '27';
+    const isIntra = String(customerState).trim() === '27';
 
     let subtotal = 0;
     let cgst = 0;
@@ -728,9 +796,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const lines = document.querySelectorAll('.invoice-line-item');
     lines.forEach(line => {
-      const qty = parseFloat(line.querySelector('.line-qty').value) || 0;
-      const price = parseFloat(line.querySelector('.line-price').value) || 0;
-      const rate = parseFloat(line.querySelector('.line-tax').value) || 0;
+      const qty = parseFloat(line.querySelector('.line-qty')?.value) || 0;
+      const price = parseFloat(line.querySelector('.line-price')?.value) || 0;
+      const rate = parseFloat(line.querySelector('.line-tax')?.value) || 0;
 
       const lineTaxable = qty * price;
       subtotal += lineTaxable;
@@ -745,77 +813,410 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const total = subtotal + cgst + sgst + igst;
 
-    document.getElementById('previewSubtotal').textContent = ui.formatINR(subtotal);
-    document.getElementById('previewCGST').textContent = ui.formatINR(cgst);
-    document.getElementById('previewSGST').textContent = ui.formatINR(sgst);
-    document.getElementById('previewIGST').textContent = ui.formatINR(igst);
-    document.getElementById('previewTotal').textContent = ui.formatINR(total);
+    const subEl = document.getElementById('previewSubtotal');
+    const cgstEl = document.getElementById('previewCGST');
+    const sgstEl = document.getElementById('previewSGST');
+    const igstEl = document.getElementById('previewIGST');
+    const totEl = document.getElementById('previewTotal');
+
+    if (subEl) subEl.textContent = ui.formatINR(subtotal);
+    if (cgstEl) cgstEl.textContent = ui.formatINR(cgst);
+    if (sgstEl) sgstEl.textContent = ui.formatINR(sgst);
+    if (igstEl) igstEl.textContent = ui.formatINR(igst);
+    if (totEl) totEl.textContent = ui.formatINR(total);
   }
   window.appRecalculateInvoicePreview = recalculateInvoicePreview;
 
-  // Invoice Submit
-  document.getElementById('btnSubmitInvoice')?.addEventListener('click', async () => {
+  // Open Create Invoice Modal with fresh defaults
+  window.appOpenCreateInvoice = function() {
+    const errorBox = document.getElementById('invoiceFormError');
+    if (errorBox) {
+      errorBox.style.display = 'none';
+      errorBox.textContent = '';
+    }
+
+    const container = document.getElementById('invoiceLinesContainer');
+    if (container) container.innerHTML = '';
+
+    const invNumInput = document.getElementById('invoiceNumberInput');
+    if (invNumInput) {
+      const nextNum = `INV-${String((state.invoices?.length || 0) + 1).padStart(4, '0')}`;
+      invNumInput.value = nextNum;
+    }
+
+    const dateInp = document.getElementById('invoiceDateInput');
+    const dueDateInp = document.getElementById('invoiceDueDateInput');
+    const today = new Date().toISOString().split('T')[0];
+    if (dateInp) dateInp.value = today;
+    if (dueDateInp) {
+      const due = new Date();
+      due.setDate(due.getDate() + 30);
+      dueDateInp.value = due.toISOString().split('T')[0];
+    }
+
+    addInvoiceLineItem();
+    recalculateInvoicePreview();
+    ui.openModal('modalInvoice');
+  };
+
+  btnNewInvoice?.addEventListener('click', window.appOpenCreateInvoice);
+  document.getElementById('btnOpenNewInvoiceFromList')?.addEventListener('click', window.appOpenCreateInvoice);
+
+  // Submit Invoice Handler (Both Deliver & Draft)
+  async function submitInvoiceForm(deliverMode) {
+    const errorBox = document.getElementById('invoiceFormError');
+    if (errorBox) {
+      errorBox.style.display = 'none';
+      errorBox.textContent = '';
+    }
+
     const customerId = document.getElementById('invoiceCustomerSelect').value;
     if (!customerId) {
-      ui.showToast('Please select a customer for the invoice.', 'error');
+      if (errorBox) {
+        errorBox.textContent = 'Please select a debtor customer for this invoice.';
+        errorBox.style.display = 'block';
+      }
+      ui.showToast('Please select a debtor customer for this invoice.', 'error');
       return;
     }
 
-    const lines = [];
-    document.querySelectorAll('.invoice-line-item').forEach(line => {
-      const itemId = line.querySelector('.line-item-select').value;
-      const hsnCode = line.querySelector('.line-hsn').value;
-      const quantity = parseFloat(line.querySelector('.line-qty').value);
-      const unitPrice = parseFloat(line.querySelector('.line-price').value);
-      const taxRate = parseFloat(line.querySelector('.line-tax').value);
+    const invoiceNumber = document.getElementById('invoiceNumberInput')?.value.trim() || undefined;
+    const invoiceDate = document.getElementById('invoiceDateInput')?.value || undefined;
+    const dueDate = document.getElementById('invoiceDueDateInput')?.value || undefined;
 
-      lines.push({ itemId, hsnCode, quantity, unitPrice, taxRate });
-    });
+    if (!invoiceDate || !dueDate) {
+      if (errorBox) {
+        errorBox.textContent = 'Invoice Date and Due Date are required.';
+        errorBox.style.display = 'block';
+      }
+      ui.showToast('Invoice Date and Due Date are required.', 'error');
+      return;
+    }
 
-    if (lines.length === 0) {
+    const lineElements = document.querySelectorAll('.invoice-line-item');
+    if (lineElements.length === 0) {
+      if (errorBox) {
+        errorBox.textContent = 'Invoice must have at least one line item.';
+        errorBox.style.display = 'block';
+      }
       ui.showToast('Invoice must have at least one line item.', 'error');
       return;
     }
 
-    const deliver = document.getElementById('invoiceDeliverCheck').checked;
-    const invoiceDate = document.getElementById('invoiceDateInput')?.value || undefined;
+    const lines = [];
+    let lineValidationError = null;
+
+    lineElements.forEach((line, idx) => {
+      const itemId = line.querySelector('.line-item-select')?.value || undefined;
+      const description = line.querySelector('.line-desc')?.value.trim() || undefined;
+      const hsnCode = line.querySelector('.line-hsn')?.value.trim();
+      const quantity = parseFloat(line.querySelector('.line-qty')?.value);
+      const unitPrice = parseFloat(line.querySelector('.line-price')?.value);
+      const taxRate = parseFloat(line.querySelector('.line-tax')?.value);
+
+      if (!hsnCode) {
+        lineValidationError = `Line ${idx + 1}: Statutory HSN/SAC code is required.`;
+      } else if (isNaN(quantity) || quantity <= 0) {
+        lineValidationError = `Line ${idx + 1}: Quantity must be greater than 0.`;
+      } else if (isNaN(unitPrice) || unitPrice < 0) {
+        lineValidationError = `Line ${idx + 1}: Unit price must be a non-negative number.`;
+      } else if (![0, 5, 12, 18, 28].includes(taxRate)) {
+        lineValidationError = `Line ${idx + 1}: Invalid GST tax slab (${taxRate}%). Allowed: 0%, 5%, 12%, 18%, 28%.`;
+      }
+
+      lines.push({ itemId, description, hsnCode, quantity, unitPrice, taxRate });
+    });
+
+    if (lineValidationError) {
+      if (errorBox) {
+        errorBox.textContent = lineValidationError;
+        errorBox.style.display = 'block';
+      }
+      ui.showToast(lineValidationError, 'error');
+      return;
+    }
+
+    const deliver = (deliverMode !== undefined) ? deliverMode : document.getElementById('invoiceDeliverCheck').checked;
+
+    const submitBtn = document.getElementById('btnSubmitInvoice');
+    const draftBtn = document.getElementById('btnSaveDraftInvoice');
 
     try {
-      const result = await api.createInvoice({ customerId, invoiceDate, deliver, lines });
-      ui.showToast(`Invoice ${result.invoiceNumber} posted! GL Voucher ${result.journalEntryId || 'committed'}`, 'success');
+      if (submitBtn) submitBtn.disabled = true;
+      if (draftBtn) draftBtn.disabled = true;
+
+      const result = await api.createInvoice({
+        customerId,
+        invoiceNumber,
+        invoiceDate,
+        dueDate,
+        deliver,
+        lines
+      });
+
       ui.closeModal('modalInvoice');
+
+      // Populate Success Modal
+      const custOpt = document.getElementById('invoiceCustomerSelect').selectedOptions[0];
+      const custName = custOpt ? custOpt.text : 'Customer';
+
+      document.getElementById('successInvNum').textContent = result.invoiceNumber;
+      document.getElementById('successInvMsg').textContent = result.status === 'DELIVERED' 
+        ? 'Delivered & committed to double-entry general ledger!'
+        : 'Saved as unposted draft invoice.';
+      document.getElementById('successInvCustomer').textContent = custName;
+      document.getElementById('successInvSubtotal').textContent = ui.formatINR(result.subtotal);
+      document.getElementById('successInvCGST').textContent = ui.formatINR(result.cgstAmount);
+      document.getElementById('successInvSGST').textContent = ui.formatINR(result.sgstAmount);
+      document.getElementById('successInvIGST').textContent = ui.formatINR(result.igstAmount);
+      document.getElementById('successInvTotal').textContent = ui.formatINR(result.totalAmount);
+      document.getElementById('successInvDue').textContent = ui.formatINR(result.dueAmount);
+
+      const jvPill = document.getElementById('successInvJournal');
+      if (result.journalEntryId) {
+        jvPill.className = 'badge badge-delivered';
+        jvPill.textContent = result.journalEntryId;
+      } else {
+        jvPill.className = 'badge badge-draft';
+        jvPill.textContent = 'None (Draft)';
+      }
+
+      const viewDetailsBtn = document.getElementById('btnSuccessViewDetails');
+      if (viewDetailsBtn) {
+        viewDetailsBtn.onclick = () => {
+          ui.closeModal('modalInvoiceSuccess');
+          window.appViewInvoiceDetails(result.id);
+        };
+      }
+
+      ui.openModal('modalInvoiceSuccess');
+      ui.showToast(`Invoice ${result.invoiceNumber} created successfully!`, 'success');
+
       await loadInvoices();
       await loadTrialBalance();
       await loadDashboard();
     } catch (err) {
+      if (errorBox) {
+        errorBox.textContent = `Backend Validation Error: ${err.message}`;
+        errorBox.style.display = 'block';
+      }
       ui.showToast(`Invoice creation failed: ${err.message}`, 'error');
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+      if (draftBtn) draftBtn.disabled = false;
     }
-  });
+  }
+
+  document.getElementById('btnSubmitInvoice')?.addEventListener('click', () => submitInvoiceForm(true));
+  document.getElementById('btnSaveDraftInvoice')?.addEventListener('click', () => submitInvoiceForm(false));
+
+  // Invoice Details Modal
+  window.appViewInvoiceDetails = async function(id) {
+    try {
+      const inv = await api.getInvoiceById(id);
+      if (!inv) {
+        ui.showToast(`Invoice '${id}' not found.`, 'error');
+        return;
+      }
+
+      document.getElementById('detInvoiceNum').textContent = `Invoice ${inv.invoiceNumber}`;
+      const statusBadge = document.getElementById('detInvoiceStatusBadge');
+      if (statusBadge) statusBadge.innerHTML = ui.renderBadge(inv.status);
+
+      // Customer Card
+      document.getElementById('detCustomerName').textContent = inv.customerName;
+      document.getElementById('detCustomerGstin').textContent = inv.customerGstin || 'Unregistered (URP)';
+      const isIntra = inv.placeOfSupply === '27';
+      document.getElementById('detCustomerPos').innerHTML = `
+        <span class="badge ${isIntra ? 'badge-delivered' : 'badge-reversal'}">
+          ${inv.placeOfSupply} (${isIntra ? 'Intra-State: CGST+SGST' : 'Inter-State: IGST'})
+        </span>
+      `;
+
+      // Metadata Card
+      document.getElementById('detInvoiceDate').textContent = ui.formatDate(inv.invoiceDate);
+      document.getElementById('detInvoiceDueDate').textContent = ui.formatDate(inv.dueDate || inv.invoiceDate);
+      const jvEl = document.getElementById('detJournalRef');
+      if (inv.journalEntryId) {
+        jvEl.innerHTML = `<span class="badge badge-delivered">GL Voucher: ${inv.journalEntryId}</span>`;
+      } else {
+        jvEl.innerHTML = `<span class="badge badge-draft">Draft (Unposted)</span>`;
+      }
+
+      // Actions in header
+      const voidBtn = document.getElementById('btnDetVoidInvoice');
+      const deliverBtn = document.getElementById('btnDetDeliverInvoice');
+
+      if (voidBtn) {
+        if (inv.status === 'DELIVERED' && (inv.paidAmount === 0 || !inv.paidAmount)) {
+          voidBtn.style.display = 'inline-block';
+          voidBtn.onclick = () => {
+            ui.closeModal('modalInvoiceDetails');
+            window.appVoidInvoice(inv.id, inv.invoiceNumber);
+          };
+        } else {
+          voidBtn.style.display = 'none';
+        }
+      }
+
+      if (deliverBtn) {
+        if (inv.status === 'DRAFT') {
+          deliverBtn.style.display = 'inline-block';
+          deliverBtn.onclick = async () => {
+            await window.appDeliverInvoice(inv.id);
+            window.appViewInvoiceDetails(inv.id);
+          };
+        } else {
+          deliverBtn.style.display = 'none';
+        }
+      }
+
+      // Lines table
+      const linesBody = document.getElementById('detLinesBody');
+      linesBody.innerHTML = '';
+      if (inv.lines && inv.lines.length > 0) {
+        inv.lines.forEach((l, idx) => {
+          linesBody.innerHTML += `
+            <tr>
+              <td><strong>${l.description || 'Item #' + (idx + 1)}</strong></td>
+              <td><code>${l.hsnCode}</code></td>
+              <td class="num">${l.quantity}</td>
+              <td class="num">${ui.formatINR(l.unitPrice)}</td>
+              <td class="num">${ui.formatINR(l.taxableAmount)}</td>
+              <td class="num"><span class="badge badge-state">${l.taxRate}%</span></td>
+              <td class="num">${l.cgstAmount > 0 ? ui.formatINR(l.cgstAmount) : '-'}</td>
+              <td class="num">${l.sgstAmount > 0 ? ui.formatINR(l.sgstAmount) : '-'}</td>
+              <td class="num">${l.igstAmount > 0 ? ui.formatINR(l.igstAmount) : '-'}</td>
+              <td class="num"><strong>${ui.formatINR(l.totalLineAmount)}</strong></td>
+            </tr>
+          `;
+        });
+      }
+
+      // Summary & Breakdown
+      document.getElementById('detSummaryTotal').textContent = ui.formatINR(inv.totalAmount);
+      document.getElementById('detSummaryPaid').textContent = ui.formatINR(inv.paidAmount || 0);
+      document.getElementById('detSummaryDue').textContent = ui.formatINR(inv.dueAmount);
+
+      document.getElementById('detBreakdownSubtotal').textContent = ui.formatINR(inv.subtotal);
+      document.getElementById('detBreakdownCGST').textContent = ui.formatINR(inv.cgstAmount);
+      document.getElementById('detBreakdownSGST').textContent = ui.formatINR(inv.sgstAmount);
+      document.getElementById('detBreakdownIGST').textContent = ui.formatINR(inv.igstAmount);
+      document.getElementById('detBreakdownTotal').textContent = ui.formatINR(inv.totalAmount);
+
+      // GL Audit Entries for this Invoice
+      const journalBody = document.getElementById('detJournalBody');
+      journalBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:12px;">Loading double-entry audit vouchers...</td></tr>';
+
+      try {
+        const txData = await api.getTransactions({ referenceId: inv.id });
+        const txs = txData.transactions || [];
+        journalBody.innerHTML = '';
+
+        if (txs.length === 0) {
+          journalBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:16px; color:var(--text-subtle);">No general ledger postings for this invoice (Draft or Pre-system).</td></tr>';
+        } else {
+          txs.forEach(t => {
+            const isReversal = t.entryType === 'REVERSAL';
+            journalBody.innerHTML += `
+              <tr style="${isReversal ? 'background:rgba(168,85,247,0.08);' : ''}">
+                <td><strong>${t.entryNumber}</strong></td>
+                <td>${ui.formatDate(t.date)}</td>
+                <td><span class="badge ${isReversal ? 'badge-reversal' : 'badge-delivered'}">${t.entryType}</span></td>
+                <td><code>${t.accountCode}</code> ${t.accountName}</td>
+                <td style="font-size:12px; color:var(--text-subtle);">${t.description || '-'}</td>
+                <td class="num">${t.debit > 0 ? ui.formatINR(t.debit) : '-'}</td>
+                <td class="num">${t.credit > 0 ? ui.formatINR(t.credit) : '-'}</td>
+              </tr>
+            `;
+          });
+        }
+      } catch (e) {
+        journalBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:12px; color:var(--rose-500);">Could not load general ledger transactions.</td></tr>';
+      }
+
+      ui.openModal('modalInvoiceDetails');
+    } catch (err) {
+      ui.showToast(`Failed to load invoice: ${err.message}`, 'error');
+    }
+  };
+
+  // Deliver Draft Invoice
+  window.appDeliverInvoice = async function(id) {
+    try {
+      const result = await api.deliverInvoice(id);
+      ui.showToast(`Invoice ${result.invoiceNumber} delivered & posted to GL! (${result.journalEntryId})`, 'success');
+      await loadInvoices();
+      await loadTrialBalance();
+      await loadDashboard();
+      return result;
+    } catch (err) {
+      ui.showToast(`Delivery failed: ${err.message}`, 'error');
+      throw err;
+    }
+  };
 
   // Void Invoice
   let targetVoidInvoiceId = null;
   window.appVoidInvoice = function(id, invoiceNumber) {
     targetVoidInvoiceId = id;
     document.getElementById('voidInvoiceNum').textContent = invoiceNumber;
-    document.getElementById('voidReasonInput').value = 'Customer cancellation / incorrect billing';
+    document.getElementById('voidReasonInput').value = 'Customer cancellation / billing discrepancy';
     ui.openModal('modalVoid');
   };
 
   document.getElementById('btnConfirmVoid')?.addEventListener('click', async () => {
     if (!targetVoidInvoiceId) return;
-    const reason = document.getElementById('voidReasonInput').value;
+    const reason = document.getElementById('voidReasonInput').value.trim() || 'Customer cancellation';
+    const confirmBtn = document.getElementById('btnConfirmVoid');
 
     try {
+      if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Posting Reversal Contra-Entries...';
+      }
+
       const result = await api.voidInvoice(targetVoidInvoiceId, reason);
       ui.showToast(`Invoice voided! Immutable reversal posted (${result.reversalJournalEntryId})`, 'success');
       ui.closeModal('modalVoid');
       targetVoidInvoiceId = null;
+
       await loadInvoices();
       await loadTrialBalance();
       await loadDashboard();
     } catch (err) {
       ui.showToast(`Void failed: ${err.message}`, 'error');
+    } finally {
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Confirm Immutable Reversal';
+      }
     }
+  });
+
+  // Filter Bar Handlers
+  document.getElementById('btnFilterInvoices')?.addEventListener('click', () => {
+    loadInvoices();
+  });
+
+  document.getElementById('btnResetInvoices')?.addEventListener('click', () => {
+    const s = document.getElementById('invSearchInput');
+    const st = document.getElementById('invStatusFilter');
+    const f = document.getElementById('invDateFrom');
+    const t = document.getElementById('invDateTo');
+    if (s) s.value = '';
+    if (st) st.value = 'ALL';
+    if (f) f.value = '';
+    if (t) t.value = '';
+    loadInvoices();
+  });
+
+  document.getElementById('invSearchInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') loadInvoices();
+  });
+
+  document.getElementById('invStatusFilter')?.addEventListener('change', () => {
+    loadInvoices();
   });
 
   // Record Payment
