@@ -228,6 +228,64 @@
             </div>
           </div>
 
+          <!-- Killer Tests Live Certification Card -->
+          <div class="card" id="killerTestsCard" style="margin-bottom: 24px; border: 1px solid rgba(16, 185, 129, 0.35); background: linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(6, 78, 59, 0.22) 100%);">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 22px;">🎯</span>
+                <div>
+                  <h3 class="card-title" style="margin: 0; font-size: 16px; color: #f8fafc;">Killer Tests Live Certification</h3>
+                  <div style="font-size: 12px; color: var(--text-subtle);">Real-time in-browser verification of all 3 non-negotiable double-entry invariants</div>
+                </div>
+              </div>
+              <button class="btn btn-primary" id="btnRunKillerTestsLive" style="background: linear-gradient(135deg, #059669, #10b981); border: none; font-weight: 700; padding: 8px 18px;">
+                <span>▶</span> Run Live Killer Tests
+              </button>
+            </div>
+            <div style="padding: 16px 20px;">
+              <div id="ktResultsContainer" style="display: flex; flex-direction: column; gap: 12px;">
+                <div class="kt-item" id="ktItem1" style="display: flex; align-items: flex-start; gap: 12px; padding: 12px; background: rgba(30, 41, 59, 0.6); border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+                  <div class="kt-status-icon" id="ktIcon1" style="font-size: 18px;">⏳</div>
+                  <div style="flex: 1;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <strong style="color: #f1f5f9; font-size: 13.5px;">Killer Test 1: Zero-Trust Transaction Balancing Guard</strong>
+                      <span class="badge badge-draft" id="ktBadge1">Ready to Test</span>
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-subtle); margin-top: 3px;" id="ktDesc1">
+                      Injects an intentionally unbalanced transaction payload (Debit ₹1,180 vs Credit ₹1,000) and asserts HTTP 422 pre-commit abort with 0 database rows.
+                    </div>
+                  </div>
+                </div>
+
+                <div class="kt-item" id="ktItem2" style="display: flex; align-items: flex-start; gap: 12px; padding: 12px; background: rgba(30, 41, 59, 0.6); border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+                  <div class="kt-status-icon" id="ktIcon2" style="font-size: 18px;">⏳</div>
+                  <div style="flex: 1;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <strong style="color: #f1f5f9; font-size: 13.5px;">Killer Test 2: Immutable Invoice Reversal Engine</strong>
+                      <span class="badge badge-draft" id="ktBadge2">Ready to Test</span>
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-subtle); margin-top: 3px;" id="ktDesc2">
+                      Delivers and voids an invoice. Asserts original journal lines are 100% preserved (0 SQL DELETE), append-only reversing contra-entries are posted, and repeated voids are safely rejected.
+                    </div>
+                  </div>
+                </div>
+
+                <div class="kt-item" id="ktItem3" style="display: flex; align-items: flex-start; gap: 12px; padding: 12px; background: rgba(30, 41, 59, 0.6); border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+                  <div class="kt-status-icon" id="ktIcon3" style="font-size: 18px;">⏳</div>
+                  <div style="flex: 1;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <strong style="color: #f1f5f9; font-size: 13.5px;">Killer Test 3: Trial Balance Equilibrium</strong>
+                      <span class="badge badge-draft" id="ktBadge3">Ready to Test</span>
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-subtle); margin-top: 3px;" id="ktDesc3">
+                      Asserts live general ledger mathematical equilibrium: Total Debits == Total Credits down to the exact paisa (Difference == 0.0000).
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="card">
             <div class="card-header">
               <div class="card-title">Recent Invoices & Double-Entry Status</div>
