@@ -10,6 +10,9 @@
     "build": "tsc",
     "type-check": "tsc --noEmit",
     "test": "npm run build && node dist/tests/runAllTests.js",
+    "test:harness": "npm run build && node dist/tests/runHarnessTests.js",
+    "test:contract": "npm run build && node dist/tests/runContractTests.js",
+    "test:integration": "npm run build && node dist/tests/runContractTests.js",
     "test:killer": "npm run build && node dist/tests/runKillerTests.js",
     "start": "npm run build && node dist/app.js"
   },
@@ -26,7 +29,7 @@
   },
   "homepage": "https://github.com/Harsha-2603/gst-accounting-ledger#readme",
   "dependencies": {
-    "better-sqlite3": "^13.0.3",
+    "better-sqlite3": "^12.11.1",
     "cors": "^2.8.6",
     "decimal.js": "^10.6.0",
     "dotenv": "^18.0.5",

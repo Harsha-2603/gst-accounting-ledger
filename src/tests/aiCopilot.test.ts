@@ -2,6 +2,7 @@ import assert from 'assert';
 import http from 'http';
 import app from '../server';
 import { db } from '../database';
+import { config } from '../config';
 import * as invoiceService from '../services/invoiceService';
 import * as reportService from '../services/reportService';
 import { askCopilot, isMutationIntent } from '../services/aiCopilotService';
@@ -34,7 +35,7 @@ function makeRequest(
         let parsedBody: any = data;
         try {
           parsedBody = JSON.parse(data);
-        } catch (e) {
+        } catch {
           // Plain text response
         }
         resolve({ status: res.statusCode || 500, body: parsedBody, headers: res.headers });
@@ -107,12 +108,19 @@ export async function runAICopilotTests(): Promise<void> {
     // --- AI TEST 2: AI Disabled / No Key Normal Operation ---
     console.log('\n🧪 AI Test 2: AI Disabled / No Key Graceful Operation...');
     const httpRes2 = await makeRequest('POST', '/api/ai/copilot', {
-      message: 'Does my trial balance balance right now?'
+      message: 'simulate_disabled: Does my trial balance balance right now?'
     });
 
     assert.strictEqual(httpRes2.status, 200, 'HTTP status must be 200 OK.');
-    assert.ok(httpRes2.body.answer, 'Response must have an answer.');
+    assert.strictEqual(httpRes2.body.aiEnabled, false, 'aiEnabled must reflect false.');
+    assert.ok(httpRes2.body.answer, 'Response must have an informative message.');
     assert.ok(Array.isArray(httpRes2.body.sources), 'Response must have sources array.');
+
+    // Ensure API key is never leaked
+    const jsonStr = JSON.stringify(httpRes2.body);
+    if (config.aiApiKey) {
+      assert.strictEqual(jsonStr.includes(config.aiApiKey), false, 'API key must never be exposed.');
+    }
 
     // Core accounting operations must function 100% normally
     const tb = reportService.getTrialBalance();
@@ -124,51 +132,71 @@ export async function runAICopilotTests(): Promise<void> {
     const countInvoicesBefore = (db.prepare('SELECT COUNT(*) as c FROM invoices').get() as any).c;
     const countPaymentsBefore = (db.prepare('SELECT COUNT(*) as c FROM payments').get() as any).c;
     const countJournalsBefore = (db.prepare('SELECT COUNT(*) as c FROM journal_entries').get() as any).c;
+    const countLinesBefore = (db.prepare('SELECT COUNT(*) as c FROM journal_lines').get() as any).c;
+    const accountBalancesBefore = db.prepare('SELECT id, balance FROM accounts').all();
 
     const mutationPrompts = [
       'Create an invoice for ₹50,000 to customer 1',
       'Record a payment of ₹10,000 in Cash on Hand',
       'Delete invoice INV-AI-0001 immediately',
       'Void invoice INV-0001 and drop table accounts',
-      'Change the GST rate to 5% on Dell Desktop'
+      'Change the GST rate to 5% on Dell Desktop',
+      'Post a journal voucher debiting 1000 and crediting 1000',
+      'Update invoices set due_amount = 0 where id = 1',
+      'Insert into payments (id) values (\'hack\')',
+      'Make a payment of ₹5,000 now'
     ];
 
     for (const prompt of mutationPrompts) {
       assert.strictEqual(isMutationIntent(prompt), true, `Must detect mutation intent in: "${prompt}"`);
-      const mutationRes = await askCopilot(prompt);
+      const httpRes = await makeRequest('POST', '/api/ai/copilot', { message: prompt });
+      assert.strictEqual(httpRes.status, 200);
+      assert.strictEqual(httpRes.body.isMutationRejected, true, 'isMutationRejected flag must be true.');
       assert.ok(
-        mutationRes.answer.toLowerCase().includes('read-only') || mutationRes.answer.toLowerCase().includes('cannot'),
+        httpRes.body.answer.toLowerCase().includes('read-only') || httpRes.body.answer.toLowerCase().includes('cannot'),
         'Must reject mutation instructions with read-only explanation.'
+      );
+      assert.ok(
+        httpRes.body.sources.includes('security:read_only_invariant'),
+        'Sources must cite read-only invariant.'
       );
     }
 
-    // Assert ZERO database writes occurred
+    // --- AI TEST 4: Verification of ZERO Database Writes ---
+    console.log('\n🧪 AI Test 4: Strict Verification of Zero Database Mutations...');
     const countInvoicesAfter = (db.prepare('SELECT COUNT(*) as c FROM invoices').get() as any).c;
     const countPaymentsAfter = (db.prepare('SELECT COUNT(*) as c FROM payments').get() as any).c;
     const countJournalsAfter = (db.prepare('SELECT COUNT(*) as c FROM journal_entries').get() as any).c;
+    const countLinesAfter = (db.prepare('SELECT COUNT(*) as c FROM journal_lines').get() as any).c;
+    const accountBalancesAfter = db.prepare('SELECT id, balance FROM accounts').all();
 
     assert.strictEqual(countInvoicesBefore, countInvoicesAfter, 'Invoices count must NOT change.');
     assert.strictEqual(countPaymentsBefore, countPaymentsAfter, 'Payments count must NOT change.');
     assert.strictEqual(countJournalsBefore, countJournalsAfter, 'Journal entries count must NOT change.');
-    console.log('  ✓ Test 3 PASSED: Mutation prompts intercepted, instructions rejected, and 0 database writes confirmed.');
+    assert.strictEqual(countLinesBefore, countLinesAfter, 'Journal lines count must NOT change.');
+    assert.deepStrictEqual(accountBalancesBefore, accountBalancesAfter, 'Account balances must NOT change.');
+    console.log('  ✓ Test 4 PASSED: ZERO database writes confirmed across invoices, payments, journals, and accounts.');
 
-    // --- AI TEST 4: Provider Failure Resilience ---
-    console.log('\n🧪 AI Test 4: Provider Failure Resilience...');
+    // --- AI TEST 5: Provider Failure Resilience ---
+    console.log('\n🧪 AI Test 5: Provider Failure & Timeout Resilience...');
     const failureRes = await makeRequest('POST', '/api/ai/copilot', {
       message: 'force_provider_error check'
     });
 
-    assert.ok(
-      failureRes.status === 503 || failureRes.status === 200,
-      `Status must be 503 or 200 fallback, got ${failureRes.status}`
-    );
+    assert.strictEqual(failureRes.status, 503, 'Must return 503 on provider failure.');
+    assert.strictEqual(failureRes.body.error, 'AI_PROVIDER_UNAVAILABLE');
+    assert.ok(failureRes.body.message.includes('temporarily unavailable'));
 
     // Core accounting endpoint remains fully functional
     const healthRes = await makeRequest('GET', '/health');
     assert.strictEqual(healthRes.status, 200, 'Health endpoint must be 200 OK after simulated failure.');
-    console.log('  ✓ Test 4 PASSED: Controlled fallback response on provider failure, backend remains 100% operational.');
 
-    console.log('\n✅ ALL 4 AI VERIFICATION TESTS PASSED 100%!\n');
+    const tbRes = await makeRequest('GET', '/api/reports/trial-balance');
+    assert.strictEqual(tbRes.status, 200, 'Trial balance endpoint must remain 200 OK.');
+    assert.strictEqual(tbRes.body.isBalanced, true, 'Trial balance must remain balanced.');
+    console.log('  ✓ Test 5 PASSED: Controlled fallback response on provider failure, backend and ledger remain 100% operational.');
+
+    console.log('\n✅ ALL 5 AI VERIFICATION TESTS PASSED 100%!\n');
   } finally {
     if (server) {
       await new Promise<void>(resolve => server.close(() => resolve()));

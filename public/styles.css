@@ -1789,4 +1789,75 @@ body {
   cursor: not-allowed;
 }
 
+/* Mutation Guidance in Chat Bubbles */
+.mutation-action-guidance {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+}
+
+.mutation-guide-title {
+  font-weight: 700;
+  color: #fda4af;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mutation-guide-desc {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+.mutation-screen-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mutation-screen-links .btn {
+  font-size: 11.5px;
+  padding: 5px 12px;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: #fecdd3;
+  transition: all 0.15s ease;
+}
+
+.mutation-screen-links .btn:hover {
+  background: rgba(244, 63, 94, 0.2);
+  border-color: var(--rose-400);
+  color: #ffffff;
+}
+
+/* AI Disabled Tag in Messages */
+.ai-disabled-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: rgba(245, 158, 11, 0.2);
+  border-radius: 4px;
+  color: #fde68a;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+/* Dashboard Panel Specific */
+.ai-dashboard-panel {
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.85) 100%);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+
 

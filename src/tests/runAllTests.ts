@@ -5,6 +5,8 @@ import { runKillerTest3 } from './killerTest3';
 
 import { runAccountingCoreUnitTests } from './accountingCore.test';
 import { runApiEndpointIntegrationTests } from './apiEndpoints.test';
+import { runHarnessScenariosTests } from './harness/harnessScenarios.test';
+import { runApiContractTests } from './contract/apiContract.test';
 import { runAICopilotTests } from './aiCopilot.test';
 
 async function runAllTests(): Promise<void> {
@@ -18,19 +20,22 @@ async function runAllTests(): Promise<void> {
   console.log('\n--- PHASE 2: FOCUSED ACCOUNTING CORE UNIT TESTS ---');
   await runAccountingCoreUnitTests();
 
-  console.log('\n--- PHASE 3: CORE HTTP REST API INTEGRATION TESTS ---');
-  await runApiEndpointIntegrationTests();
+  console.log('\n--- PHASE 3: TEST HARNESS & REUSABLE SCENARIOS FIXTURES ---');
+  await runHarnessScenariosTests();
 
-  console.log('\n--- PHASE 4: KILLER TESTS CERTIFICATION ---');
+  console.log('\n--- PHASE 4: FULL API CONTRACT & INTEGRATION TESTS ---');
+  await runApiContractTests();
+
+  console.log('\n--- PHASE 5: KILLER TESTS CERTIFICATION ---');
   await runKillerTest1();
   await runKillerTest2();
   await runKillerTest3();
 
-  console.log('\n--- PHASE 5: AI ACCOUNTING COPILOT VERIFICATION (DIFFERENTIATOR) ---');
+  console.log('\n--- PHASE 6: AI ACCOUNTING COPILOT VERIFICATION (DIFFERENTIATOR) ---');
   await runAICopilotTests();
 
-  console.log('\n--- PHASE 6: KILLER TEST REGRESSION SAFETY RE-RUN ---');
-  console.log('Re-certifying that AI Copilot and additions caused ZERO double-entry regressions:');
+  console.log('\n--- PHASE 7: KILLER TEST REGRESSION SAFETY RE-RUN ---');
+  console.log('Re-certifying that all test suites and additions caused ZERO double-entry regressions:');
   await runKillerTest1();
   await runKillerTest2();
   await runKillerTest3();

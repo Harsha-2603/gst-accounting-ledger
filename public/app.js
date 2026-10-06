@@ -2017,12 +2017,25 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- AI Accounting Copilot Controller (Strictly Read-Only) ---
   let isAILoading = false;
 
+  window.appNavigate = navigate;
+  window.closeAIDrawer = closeAIDrawer;
+  window.openAIDrawer = openAIDrawer;
+
   window.appOpenJournalVoucher = function(voucherNum) {
     navigate('journal');
     const input = document.getElementById('journalSearchInput');
     if (input && voucherNum) {
       input.value = voucherNum;
       loadTransactions();
+    }
+  };
+
+  window.appViewInvoiceDetails = function(invIdOrNum) {
+    navigate('invoices');
+    const input = document.getElementById('invSearchInput');
+    if (input && invIdOrNum) {
+      input.value = invIdOrNum;
+      loadInvoices();
     }
   };
 
@@ -2040,6 +2053,7 @@ document.addEventListener('DOMContentLoaded', () => {
   btnOpenAI?.addEventListener('click', openAIDrawer);
   btnCloseAI?.addEventListener('click', closeAIDrawer);
   aiDrawerOverlay?.addEventListener('click', closeAIDrawer);
+  document.getElementById('btnExpandAIDrawer')?.addEventListener('click', openAIDrawer);
 
   // Keyboard Shortcut: Ctrl+K or Cmd+K
   document.addEventListener('keydown', (e) => {
@@ -2053,8 +2067,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Clear Chat History
-  document.getElementById('btnClearPageAIChat')?.addEventListener('click', () => {
+  // Clear Chat History Action
+  const clearChatHandler = () => {
     state.aiMessages = [
       {
         sender: 'assistant',
@@ -2065,16 +2079,47 @@ document.addEventListener('DOMContentLoaded', () => {
     ];
     renderAIChat();
     ui.showToast('Copilot conversation thread cleared.', 'info');
-  });
+  };
+
+  document.getElementById('btnClearPageAIChat')?.addEventListener('click', clearChatHandler);
+  document.getElementById('btnClearDrawerAIChat')?.addEventListener('click', clearChatHandler);
+  document.getElementById('btnClearDashboardAIChat')?.addEventListener('click', clearChatHandler);
+
+  function setAILoadingUI(loading) {
+    const btnSendAI = document.getElementById('btnSendAI');
+    const btnSendPageAI = document.getElementById('btnSendPageAI');
+    const btnSendDashboardAI = document.getElementById('btnSendDashboardAI');
+    const aiInput = document.getElementById('aiInput');
+    const aiPageInput = document.getElementById('aiPageInput');
+    const aiDashboardInput = document.getElementById('aiDashboardInput');
+
+    if (btnSendAI) {
+      btnSendAI.disabled = loading;
+      btnSendAI.textContent = loading ? '...' : 'Send';
+    }
+    if (btnSendPageAI) {
+      btnSendPageAI.disabled = loading;
+      btnSendPageAI.textContent = loading ? 'Analyzing...' : 'Ask Copilot';
+    }
+    if (btnSendDashboardAI) {
+      btnSendDashboardAI.disabled = loading;
+      btnSendDashboardAI.textContent = loading ? '...' : 'Send';
+    }
+    if (aiInput) aiInput.disabled = loading;
+    if (aiPageInput) aiPageInput.disabled = loading;
+    if (aiDashboardInput) aiDashboardInput.disabled = loading;
+  }
 
   // Send AI Message Controller
   async function handleSendAIMessage(queryText) {
     const aiPageInput = document.getElementById('aiPageInput');
-    const text = (queryText || aiInput.value || (aiPageInput ? aiPageInput.value : '')).trim();
+    const aiDashboardInput = document.getElementById('aiDashboardInput');
+    const text = (queryText || aiInput.value || (aiPageInput ? aiPageInput.value : '') || (aiDashboardInput ? aiDashboardInput.value : '')).trim();
     if (!text || isAILoading) return;
 
     aiInput.value = '';
     if (aiPageInput) aiPageInput.value = '';
+    if (aiDashboardInput) aiDashboardInput.value = '';
 
     const userTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -2087,14 +2132,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     isAILoading = true;
+    setAILoadingUI(true);
     renderAIChat();
 
     try {
       // 2. Call strictly POST /api/ai/copilot — NEVER call mutation endpoints
       const response = await api.askCopilot(text);
       isAILoading = false;
+      setAILoadingUI(false);
 
       const isRefusal = (response.sources && response.sources.includes('security:read_only_invariant')) ||
+                        Boolean(response.isMutationRejected) ||
                         response.answer.toLowerCase().includes('strictly read-only') ||
                         response.answer.toLowerCase().includes('cannot create, modify, or delete');
 
@@ -2102,8 +2150,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (response.aiEnabled === false) {
         const pBanner = document.getElementById('aiPageDisabledBanner');
         const dBanner = document.getElementById('aiDrawerDisabledBanner');
+        const dbBanner = document.getElementById('aiDashboardDisabledBanner');
         if (pBanner) pBanner.style.display = 'flex';
         if (dBanner) dBanner.style.display = 'flex';
+        if (dbBanner) dbBanner.style.display = 'flex';
       }
 
       state.aiMessages.push({
@@ -2111,15 +2161,17 @@ document.addEventListener('DOMContentLoaded', () => {
         text: response.answer,
         sources: response.sources || [],
         aiEnabled: response.aiEnabled,
+        isDisabled: response.aiEnabled === false,
         isMutationRefusal: isRefusal,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       });
     } catch (err) {
       isAILoading = false;
+      setAILoadingUI(false);
       const isProviderFailure = err.statusCode === 503 ||
                                 (err.error && err.error.includes('AI_PROVIDER_UNAVAILABLE')) ||
-                                err.message.toLowerCase().includes('unavailable') ||
-                                err.message.toLowerCase().includes('timed out');
+                                (err.message && err.message.toLowerCase().includes('unavailable')) ||
+                                (err.message && err.message.toLowerCase().includes('timed out'));
 
       state.aiMessages.push({
         sender: 'assistant',
@@ -2148,6 +2200,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') handleSendAIMessage();
   });
 
+  const btnSendDashboardAI = document.getElementById('btnSendDashboardAI');
+  const aiDashboardInput = document.getElementById('aiDashboardInput');
+  btnSendDashboardAI?.addEventListener('click', () => handleSendAIMessage());
+  aiDashboardInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleSendAIMessage();
+  });
+
   // Suggestion Quick Query Chips
   document.querySelectorAll('.suggestion-chip').forEach(chip => {
     chip.addEventListener('click', () => {
@@ -2159,7 +2218,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderAIChat() {
     const threads = [
       document.getElementById('aiChatThread'),
-      document.getElementById('aiPageChatThread')
+      document.getElementById('aiPageChatThread'),
+      document.getElementById('aiDashboardChatThread')
     ].filter(Boolean);
 
     threads.forEach(thread => {
@@ -2182,16 +2242,34 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         `;
 
-        // Refusal or Error Badge
+        // Refusal, Disabled, or Error Badge
         let badgeHtml = '';
         if (msg.isMutationRefusal) {
           badgeHtml = `<div class="mutation-refusal-tag">🛡️ Controlled Refusal — Read-Only Invariant Enforced</div>`;
+        } else if (msg.isDisabled) {
+          badgeHtml = `<div class="ai-disabled-tag">ℹ️ Copilot Disabled — Core Accounting Active</div>`;
         } else if (msg.isError) {
           badgeHtml = `<div class="provider-error-tag">⚠️ Provider Fallback — Accounting Data Safe</div>`;
         }
 
         // Message Text
         let contentHtml = `<div>${msg.text}</div>`;
+
+        // Mutation Explanation and Guidance to Normal Accounting Screens
+        let mutationGuideHtml = '';
+        if (msg.isMutationRefusal) {
+          mutationGuideHtml = `
+            <div class="mutation-action-guidance">
+              <div class="mutation-guide-title">📝 Accounting Changes Must Be Made Through Standard Screens:</div>
+              <div class="mutation-guide-desc">The AI Copilot is strictly read-only and cannot alter books of accounts or post entries. To record or modify transactions, please use the verified accounting workflows:</div>
+              <div class="mutation-screen-links">
+                <button class="btn btn-secondary btn-sm" onclick="window.appNavigate('invoices'); if (window.closeAIDrawer) window.closeAIDrawer();">📄 Sales Invoices</button>
+                <button class="btn btn-secondary btn-sm" onclick="window.appNavigate('payments'); if (window.closeAIDrawer) window.closeAIDrawer();">💳 Customer Payments</button>
+                <button class="btn btn-secondary btn-sm" onclick="window.appNavigate('journal'); if (window.closeAIDrawer) window.closeAIDrawer();">📜 Journal Vouchers</button>
+              </div>
+            </div>
+          `;
+        }
 
         // Interactive Source Document Citations
         let sourcesHtml = '';
@@ -2219,7 +2297,7 @@ document.addEventListener('DOMContentLoaded', () => {
           sourcesHtml += `</div>`;
         }
 
-        bubble.innerHTML = headerHtml + badgeHtml + contentHtml + sourcesHtml;
+        bubble.innerHTML = headerHtml + badgeHtml + contentHtml + mutationGuideHtml + sourcesHtml;
         thread.appendChild(bubble);
       });
 

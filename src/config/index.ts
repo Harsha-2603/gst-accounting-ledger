@@ -10,7 +10,7 @@ export const config = {
   baseCurrency: process.env.BASE_CURRENCY || 'INR',
   defaultStateCode: process.env.DEFAULT_STATE_CODE || '27',
   env: process.env.NODE_ENV || 'development',
-  aiEnabled: process.env.AI_ENABLED === 'true',
+  aiEnabled: process.env.AI_ENABLED !== 'false',
   aiProvider: process.env.AI_PROVIDER || 'gemini',
   aiApiKey: process.env.AI_API_KEY || '',
   aiModel: process.env.AI_MODEL || 'gemini-1.5-flash'
