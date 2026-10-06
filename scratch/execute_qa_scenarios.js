@@ -354,17 +354,37 @@ async function runQA() {
     assert.strictEqual(gstr1Res.status, 200);
     const gstr1 = gstr1Res.body;
 
-    assert.ok(gstr1.b2bInvoices && Array.isArray(gstr1.b2bInvoices), 'b2bInvoices must be array');
+    assert.ok(gstr1.b2bSummary && Array.isArray(gstr1.b2bSummary), 'b2bSummary must be array');
     assert.ok(gstr1.hsnSummary && Array.isArray(gstr1.hsnSummary), 'hsnSummary must be array');
-    assert.ok(gstr1.summary, 'Summary object must be present');
 
-    console.log(`  [F.1] Section 4A (B2B Invoices): ${gstr1.b2bInvoices.length} invoices returned.`);
+    // Aggregate summary totals from B2B rows (matching frontend UI calculation)
+    const totalTaxable = gstr1.b2bSummary.reduce((acc, row) => acc + (row.taxableValue || 0), 0);
+    const totalCgst = gstr1.b2bSummary.reduce((acc, row) => acc + (row.cgst || 0), 0);
+    const totalSgst = gstr1.b2bSummary.reduce((acc, row) => acc + (row.sgst || 0), 0);
+    const totalIgst = gstr1.b2bSummary.reduce((acc, row) => acc + (row.igst || 0), 0);
+    const totalGrand = totalTaxable + totalCgst + totalSgst + totalIgst;
+
+    console.log(`  [F.1] Section 4A (B2B Invoices): ${gstr1.b2bSummary.length} invoices returned.`);
     console.log(`  [F.2] Section 12 (HSN Summary): ${gstr1.hsnSummary.length} HSN code classifications.`);
-    console.log(`  [F.3] Summary Totals: Taxable ₹${gstr1.summary.totalTaxable} | CGST ₹${gstr1.summary.totalCgst} | SGST ₹${gstr1.summary.totalSgst} | IGST ₹${gstr1.summary.totalIgst}`);
+    console.log(`  [F.3] Summary Totals: Taxable ₹${totalTaxable} | CGST ₹${totalCgst} | SGST ₹${totalSgst} | IGST ₹${totalIgst} | Total ₹${totalGrand}`);
 
-    assert.ok(gstr1.summary.totalTaxable >= 10000, 'Taxable value must reflect delivered invoices');
-    assert.ok(gstr1.summary.totalCgst >= 900, 'CGST must reflect intra-state invoices');
-    assert.ok(gstr1.summary.totalIgst >= 1800, 'IGST must reflect inter-state invoices');
+    // Verify statutory fields on B2B invoices
+    assert.ok(gstr1.b2bSummary.length > 0, 'B2B list must contain delivered invoices');
+    const sampleInv = gstr1.b2bSummary[0];
+    assert.ok(sampleInv.customerGstin !== undefined, 'Must contain customerGstin');
+    assert.ok(sampleInv.invoiceNumber, 'Must contain invoiceNumber');
+    assert.ok(sampleInv.invoiceDate, 'Must contain invoiceDate');
+    assert.ok(sampleInv.taxableValue > 0, 'Taxable value must be > 0');
+
+    // Verify statutory fields on HSN summary
+    assert.ok(gstr1.hsnSummary.length > 0, 'HSN summary must contain entries');
+    const sampleHsn = gstr1.hsnSummary[0];
+    assert.ok(sampleHsn.hsnCode, 'Must contain HSN code');
+    assert.ok(sampleHsn.taxableValue > 0, 'HSN taxable value must be > 0');
+
+    assert.ok(totalTaxable >= 10000, 'Taxable value must reflect delivered invoices');
+    assert.ok(totalCgst >= 900, 'CGST must reflect intra-state invoices');
+    assert.ok(totalIgst >= 1800, 'IGST must reflect inter-state invoices');
 
     qaResults.passed.push('SCENARIO F — GSTR-1 Section 4A B2B & Section 12 HSN Summary Return');
   } catch (err) {
@@ -378,9 +398,10 @@ async function runQA() {
   console.log('\n▶ SCENARIO G: AI Accounting Copilot Flow');
   try {
     // 1. Grounded Question: "Why is this invoice ₹11,800?"
-    const aiInv = await request('POST', '/api/ai/copilot', { message: 'Why is invoice INV-0001 ₹11,800?' });
+    const aiInv = await request('POST', '/api/ai/copilot', { message: 'Why is this invoice ₹11,800?' });
     assert.strictEqual(aiInv.status, 200);
     assert.ok(aiInv.body.sources.length > 0, 'Sources must be returned');
+    assert.ok(aiInv.body.answer.includes('11,800') || aiInv.body.answer.includes('11800'), 'Answer must mention 11,800');
     console.log(`  [G.1] Answer: "${aiInv.body.answer.slice(0, 90)}..." (Sources: [${aiInv.body.sources.join(', ')}])`);
 
     // 2. Grounded Question: "Does my Trial Balance balance?"

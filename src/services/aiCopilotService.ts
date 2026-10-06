@@ -93,43 +93,59 @@ interface GroundedResult {
 function generateGroundedAnswer(query: string): GroundedResult {
   const lower = query.toLowerCase();
 
-  // 1. Query for a specific invoice (e.g. "INV-0001", "INV-1", etc.)
+  // 1. Query for a specific invoice (e.g. "INV-0001", "INV-1", "Why is this invoice ₹11,800?", etc.)
   const invMatch = query.match(/INV-[\w-]+/i);
+  let inv: any = null;
+  let searchedNumber: string | null = null;
+
   if (invMatch) {
-    const invNumber = invMatch[0].toUpperCase();
-    const inv = invoiceService.getInvoiceById(invNumber);
-
-    if (inv) {
-      const isIntraState = inv.placeOfSupply === '27';
-      const linesDesc = inv.lines && inv.lines.length > 0
-        ? inv.lines.map((l: any) => `${l.quantity} units of ${l.description || 'Item'} (₹${l.taxableAmount.toFixed(2)})`).join(', ')
-        : 'taxable goods';
-
-      let taxExplanation = '';
-      if (isIntraState) {
-        taxExplanation = `Because the customer is located in Maharashtra (State ${inv.placeOfSupply}, intra-state supply), the 18% GST is split equally into 9% CGST (₹${inv.cgstAmount.toFixed(2)}) and 9% SGST (₹${inv.sgstAmount.toFixed(2)}).`;
-      } else {
-        taxExplanation = `Because the customer is located out-of-state (State ${inv.placeOfSupply}, inter-state supply), 100% of the tax is allocated to IGST (₹${inv.igstAmount.toFixed(2)}).`;
+    searchedNumber = invMatch[0].toUpperCase();
+    inv = invoiceService.getInvoiceById(searchedNumber);
+  } else if (lower.includes('invoice')) {
+    const amtMatch = query.replace(/,/g, '').match(/(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?)/i);
+    const invoices = invoiceService.getInvoices();
+    if (amtMatch) {
+      const targetAmt = parseFloat(amtMatch[1]);
+      const found = invoices.find((i: any) => Math.abs(i.totalAmount - targetAmt) < 0.01);
+      if (found) {
+        inv = invoiceService.getInvoiceById(found.id);
       }
-
-      const answer = `Invoice ${inv.invoiceNumber} total is ₹${inv.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}. It has a taxable subtotal of ₹${inv.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })} across ${linesDesc}. ${taxExplanation} Status: ${inv.status}. Outstanding Due: ₹${inv.dueAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}.`;
-
-      return {
-        answer,
-        sources: [
-          `invoice:${inv.invoiceNumber}`,
-          `gst_split:${inv.placeOfSupply}`,
-          ...(inv.lines && inv.lines[0] ? [`invoice_lines:${inv.lines[0].itemId}`] : [])
-        ],
-        context: { invoice: inv }
-      };
-    } else {
-      return {
-        answer: `I could not find an invoice matching '${invNumber}' in your live accounting records. Please verify the invoice number.`,
-        sources: ['invoices:query'],
-        context: {}
-      };
     }
+    if (!inv && invoices.length > 0) {
+      inv = invoiceService.getInvoiceById(invoices[0].id);
+    }
+  }
+
+  if (inv) {
+    const isIntraState = inv.placeOfSupply === '27';
+    const linesDesc = inv.lines && inv.lines.length > 0
+      ? inv.lines.map((l: any) => `${l.quantity} units of ${l.description || 'Item'} (₹${l.taxableAmount.toFixed(2)})`).join(', ')
+      : 'taxable goods';
+
+    let taxExplanation = '';
+    if (isIntraState) {
+      taxExplanation = `Because the customer is located in Maharashtra (State ${inv.placeOfSupply}, intra-state supply), the 18% GST is split equally into 9% CGST (₹${inv.cgstAmount.toFixed(2)}) and 9% SGST (₹${inv.sgstAmount.toFixed(2)}).`;
+    } else {
+      taxExplanation = `Because the customer is located out-of-state (State ${inv.placeOfSupply}, inter-state supply), 100% of the tax is allocated to IGST (₹${inv.igstAmount.toFixed(2)}).`;
+    }
+
+    const answer = `Invoice ${inv.invoiceNumber} total is ₹${inv.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}. It has a taxable subtotal of ₹${inv.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })} across ${linesDesc}. ${taxExplanation} Status: ${inv.status}. Outstanding Due: ₹${inv.dueAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}.`;
+
+    return {
+      answer,
+      sources: [
+        `invoice:${inv.invoiceNumber}`,
+        `gst_split:${inv.placeOfSupply}`,
+        ...(inv.lines && inv.lines[0] ? [`invoice_lines:${inv.lines[0].itemId}`] : [])
+      ],
+      context: { invoice: inv }
+    };
+  } else if (searchedNumber) {
+    return {
+      answer: `I could not find an invoice matching '${searchedNumber}' in your live accounting records. Please verify the invoice number.`,
+      sources: ['invoices:query'],
+      context: {}
+    };
   }
 
   // 2. Query regarding Trial Balance equilibrium
