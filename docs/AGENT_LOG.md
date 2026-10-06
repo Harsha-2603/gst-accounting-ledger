@@ -142,3 +142,22 @@ This log documents the stage-by-stage reverse-engineering trajectory, evidence d
 - [x] Zero Guess claims carried forward.
 - [x] Zero Bigcapital application code copied.
 - [x] A completely new AI agent can build the V1 core using only the `docs/` suite.
+
+---
+
+## 6. Clean-Room Implementation & Killer Test Suite Log
+
+### Stage 11: Backend Rebuild & Killer Test Suite Execution
+- **Action**: Built clean-room GST-Ready Accounting Ledger backend in Node.js 24 + TypeScript + Express + SQLite (`better-sqlite3`).
+- **Core Modules Built**:
+  - **Decimal Arithmetic**: `decimal.js` monetary wrapper with 4 decimal places (`0.0000`).
+  - **GST Engine**: Dual-split CGST/SGST (50/50) intra-state vs IGST (100%) inter-state, HSN cataloging, recognized GST slabs (`0, 5, 12, 18, 28`).
+  - **Zero-Trust Transaction Balancing Guard**: Pre-commit assertion $|\sum \text{Debit} - \sum \text{Credit}| < 0.0001$. Throws `UnbalancedTransactionError` (HTTP 422) and performs 0 DB writes.
+  - **Immutable Reversal Engine**: Append-only contra-entry voucher generation on invoice voiding with zero physical row deletion.
+  - **Trial Balance Reporting**: Live GL line aggregation verifying global ledger equilibrium ($|\text{Debit} - \text{Credit}| == 0.0000$) and account-level totals.
+- **Killer Test Suite Results**:
+  - **KILLER TEST 1**: Unbalanced transaction (Debit: ₹1,180.00 vs Credit: ₹1,000.00) rejected with HTTP 422 `UNPROCESSABLE_ENTITY`, 0 DB rows written, and 0 account balance mutations. **PASSED**.
+  - **KILLER TEST 2**: Delivered GST invoice created, 4 GL lines verified, voided with reversing contra-entries, original lines 100% preserved (0 SQL DELETE), status set to `VOIDED`, net effect zero, and second void attempt rejected with HTTP 400. **PASSED**.
+  - **KILLER TEST 3**: Database reset to empty ledger state, 20 randomized transactions executed (intra-state invoices, inter-state invoices, partial payments, full payments, voids), `GET /api/reports/trial-balance` called, and verified `totalDebit == totalCredit` (`difference == 0.0000`) and account-level totals. **PASSED**.
+- **Single Master Execution Command**: `npm run test:killer` (or `npm test`) compiles TypeScript and runs all tests with clean terminal output.
+
