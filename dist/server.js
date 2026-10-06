@@ -25,6 +25,7 @@ app.use(idempotency_1.idempotencyGuard);
 app.use(express_1.default.static(path_1.default.join(process.cwd(), 'public')));
 // Health check endpoint
 app.use('/', health_1.default);
+app.use('/api', health_1.default);
 // API v1 Routers
 app.use('/api/invoices', invoices_1.default);
 app.use('/api/payments', payments_1.default);

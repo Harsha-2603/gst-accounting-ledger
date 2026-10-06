@@ -113,12 +113,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Routing Solution ---
   function navigate(route) {
-    const validRoutes = ['dashboard', 'customers', 'items', 'invoices', 'payments', 'trial-balance', 'gstr1', 'journal'];
+    if (route === 'login') {
+      loginScreen.classList.add('active');
+      return;
+    }
+
+    if (route === 'transactions') {
+      route = 'journal';
+    }
+
+    const validRoutes = ['dashboard', 'customers', 'items', 'invoices', 'payments', 'trial-balance', 'gstr1', 'journal', 'copilot'];
     const targetRoute = validRoutes.includes(route) ? route : 'dashboard';
     state.activeRoute = targetRoute;
 
     navItems.forEach(item => {
-      if (item.dataset.tab === targetRoute) {
+      if (item.dataset.tab === targetRoute || (targetRoute === 'journal' && item.dataset.tab === 'transactions')) {
         item.classList.add('active');
       } else {
         item.classList.remove('active');
@@ -141,7 +150,8 @@ document.addEventListener('DOMContentLoaded', () => {
       payments: 'Customer Payments & AR Relief',
       'trial-balance': 'Trial Balance Sheet (Accrual Basis)',
       gstr1: 'GSTR-1 Statutory Return',
-      journal: 'Double-Entry General Ledger Audit Log'
+      journal: 'Double-Entry General Ledger Audit Log',
+      copilot: 'AI Accounting Copilot (Strictly Read-Only)'
     };
     pageTitle.textContent = routeTitles[targetRoute] || 'Accounting Ledger';
 
@@ -155,6 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
       case 'trial-balance': loadTrialBalance(); break;
       case 'gstr1': loadGSTR1(); break;
       case 'journal': loadTransactions(); break;
+      case 'copilot': renderAIChat(); break;
     }
 
     if (window.innerWidth <= 900) {
@@ -411,9 +422,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // 7. Trial Balance
-  async function loadTrialBalance() {
+  async function loadTrialBalance(toDate) {
     try {
-      const tb = await api.getTrialBalance();
+      const tb = await api.getTrialBalance(toDate);
       state.trialBalance = tb;
       updateEquilibriumHeader(tb);
 
@@ -478,10 +489,16 @@ document.addEventListener('DOMContentLoaded', () => {
     ui.showToast('Trial Balance recalculated and certified balanced.', 'success');
   };
 
+  document.getElementById('btnFilterTB')?.addEventListener('click', () => {
+    const toDate = document.getElementById('tbDateFilter').value;
+    loadTrialBalance(toDate);
+    ui.showToast(toDate ? `Trial Balance filtered as of ${toDate}` : 'Trial Balance refreshed', 'info');
+  });
+
   // 8. GSTR-1
-  async function loadGSTR1() {
+  async function loadGSTR1(fromDate, toDate) {
     try {
-      const gstr1 = await api.getGSTR1();
+      const gstr1 = await api.getGSTR1(fromDate, toDate);
       state.gstr1 = gstr1;
 
       // Section 4A B2B
@@ -533,6 +550,13 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('gstr1B2BBody').innerHTML = `<tr><td colspan="10">${ui.renderErrorState(err.message, 'loadGSTR1')}</td></tr>`;
     }
   }
+
+  document.getElementById('btnFilterGSTR1')?.addEventListener('click', () => {
+    const fromDate = document.getElementById('gstr1FromDate').value;
+    const toDate = document.getElementById('gstr1ToDate').value;
+    loadGSTR1(fromDate, toDate);
+    ui.showToast('GSTR-1 report updated for selected period.', 'info');
+  });
 
   // 9. Audit Journal Vouchers
   async function loadTransactions() {
@@ -754,9 +778,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const deliver = document.getElementById('invoiceDeliverCheck').checked;
+    const invoiceDate = document.getElementById('invoiceDateInput')?.value || undefined;
 
     try {
-      const result = await api.createInvoice({ customerId, deliver, lines });
+      const result = await api.createInvoice({ customerId, invoiceDate, deliver, lines });
       ui.showToast(`Invoice ${result.invoiceNumber} posted! GL Voucher ${result.journalEntryId || 'committed'}`, 'success');
       ui.closeModal('modalInvoice');
       await loadInvoices();
@@ -855,12 +880,15 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    const paymentDate = document.getElementById('paymentDateInput')?.value || undefined;
+
     try {
       const result = await api.recordPayment({
         customerId,
         depositAccountId,
         amount,
         referenceNumber,
+        paymentDate,
         allocations
       });
 
@@ -928,9 +956,19 @@ document.addEventListener('DOMContentLoaded', () => {
   // Modal Open/Close Event Handlers
   btnNewInvoice?.addEventListener('click', () => {
     addInvoiceLineItem();
+    const dateInp = document.getElementById('invoiceDateInput');
+    if (dateInp && !dateInp.value) {
+      dateInp.value = new Date().toISOString().split('T')[0];
+    }
     ui.openModal('modalInvoice');
   });
-  btnNewPayment?.addEventListener('click', () => ui.openModal('modalPayment'));
+  btnNewPayment?.addEventListener('click', () => {
+    const dateInp = document.getElementById('paymentDateInput');
+    if (dateInp && !dateInp.value) {
+      dateInp.value = new Date().toISOString().split('T')[0];
+    }
+    ui.openModal('modalPayment');
+  });
 
   document.querySelectorAll('.btn-modal-close').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -972,10 +1010,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   async function handleSendAIMessage(queryText) {
-    const text = queryText || aiInput.value.trim();
+    const aiPageInput = document.getElementById('aiPageInput');
+    const text = (queryText || aiInput.value || (aiPageInput ? aiPageInput.value : '')).trim();
     if (!text) return;
 
     aiInput.value = '';
+    if (aiPageInput) aiPageInput.value = '';
 
     state.aiMessages.push({ sender: 'user', text, sources: [] });
     renderAIChat();
@@ -1017,27 +1057,47 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  function renderAIChat() {
-    aiChatThread.innerHTML = '';
-    state.aiMessages.forEach(msg => {
-      const bubble = document.createElement('div');
-      const isMutationWarning = msg.text.includes('strictly read-only');
-      bubble.className = `chat-bubble ${msg.sender} ${isMutationWarning ? 'mutation-warning' : ''}`;
+  // Full-page AI View Listeners
+  const btnSendPageAI = document.getElementById('btnSendPageAI');
+  const aiPageInput = document.getElementById('aiPageInput');
+  btnSendPageAI?.addEventListener('click', () => handleSendAIMessage());
+  aiPageInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleSendAIMessage();
+  });
 
-      let content = `<div>${msg.text}</div>`;
-      if (msg.sources && msg.sources.length > 0) {
-        content += `<div class="sources-container">`;
-        msg.sources.forEach(src => {
-          content += `<span class="source-tag">📄 ${src}</span>`;
-        });
-        content += `</div>`;
-      }
-
-      bubble.innerHTML = content;
-      aiChatThread.appendChild(bubble);
+  document.querySelectorAll('.page-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      handleSendAIMessage(chip.dataset.question);
     });
+  });
 
-    aiChatThread.scrollTop = aiChatThread.scrollHeight;
+  function renderAIChat() {
+    const threads = [
+      document.getElementById('aiChatThread'),
+      document.getElementById('aiPageChatThread')
+    ].filter(Boolean);
+
+    threads.forEach(thread => {
+      thread.innerHTML = '';
+      state.aiMessages.forEach(msg => {
+        const bubble = document.createElement('div');
+        const isMutationWarning = msg.text.includes('strictly read-only') || msg.text.includes('SECURITY WARNING');
+        bubble.className = `chat-bubble ${msg.sender} ${isMutationWarning ? 'mutation-warning' : ''}`;
+
+        let content = `<div>${msg.text}</div>`;
+        if (msg.sources && msg.sources.length > 0) {
+          content += `<div class="sources-container">`;
+          msg.sources.forEach(src => {
+            content += `<span class="source-tag">📄 ${src}</span>`;
+          });
+          content += `</div>`;
+        }
+
+        bubble.innerHTML = content;
+        thread.appendChild(bubble);
+      });
+      thread.scrollTop = thread.scrollHeight;
+    });
   }
 
   // --- Initial Boot ---
