@@ -94,7 +94,7 @@ Verified prerequisites based on the repository and architecture documentation:
 
 ## Setup — How to run the rebuild in 5 commands or fewer
 
-The setup and run sequence for the repository requires five commands or fewer:
+The setup and run sequence for the repository requires five commands:
 
 ```bash
 # 1. Clone the repository
@@ -102,8 +102,19 @@ git clone https://github.com/Harsha-2603/gst-accounting-ledger.git
 
 # 2. Enter repository directory
 cd gst-accounting-ledger
+
+# 3. Install verified dependencies
+npm install
+
+# 4. Build TypeScript application
+npm run build
+
+# 5. Start the production server (runs at http://127.0.0.1:3000)
+npm start
 ```
 
-> **Note on Build and Execution Commands**:
-> Additional package installation, database migration, or server startup commands: *Not established from the available repository information.*
-> The repository currently hosts the complete technical specification, data model, API contract, and architecture design suite in [docs/](file:///c:/BoxBox/HackBack/gst-accounting-ledger/docs/). Application source code manifests and executable scripts have not yet been established in the repository.
+> **Run Automated Verification & Killer Tests**:
+> ```bash
+> npm test
+> ```
+
