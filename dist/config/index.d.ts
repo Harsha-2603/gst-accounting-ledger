@@ -5,4 +5,8 @@ export declare const config: {
     baseCurrency: string;
     defaultStateCode: string;
     env: string;
+    aiEnabled: boolean;
+    aiProvider: string;
+    aiApiKey: string;
+    aiModel: string;
 };

@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
+const path_1 = __importDefault(require("path"));
 const idempotency_1 = require("./middleware/idempotency");
 const errorHandler_1 = require("./middleware/errorHandler");
 const health_1 = __importDefault(require("./routes/health"));
@@ -15,10 +16,13 @@ const transactions_1 = __importDefault(require("./routes/transactions"));
 const reports_1 = __importDefault(require("./routes/reports"));
 const customers_1 = __importDefault(require("./routes/customers"));
 const items_1 = __importDefault(require("./routes/items"));
+const ai_1 = __importDefault(require("./routes/ai"));
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
 app.use(idempotency_1.idempotencyGuard);
+// Serve frontend static assets from public directory
+app.use(express_1.default.static(path_1.default.join(process.cwd(), 'public')));
 // Health check endpoint
 app.use('/', health_1.default);
 // API v1 Routers
@@ -29,6 +33,7 @@ app.use('/api/transactions', transactions_1.default);
 app.use('/api/reports', reports_1.default);
 app.use('/api/customers', customers_1.default);
 app.use('/api/items', items_1.default);
+app.use('/api/ai', ai_1.default);
 // Global Error Middleware
 app.use(errorHandler_1.errorHandler);
 exports.default = app;

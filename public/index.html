@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GST-Ready Accounting Ledger — Clean-Room Rebuild</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22><text y=%2226%22 font-size=%2226%22>⚖️</text></svg>">
+</head>
+<body>
+  <!-- Login Screen Overlay (Route: #login) -->
+  <div class="login-screen" id="loginScreen">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="login-logo">⚖️</div>
+        <h1 class="login-title">GST Ledger V1</h1>
+        <p class="login-desc">Clean-Room Double-Entry Accounting Software</p>
+      </div>
+
+      <form id="loginForm" onsubmit="event.preventDefault(); window.appHandleLogin();">
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          <input type="email" class="form-input" id="loginEmail" value="admin@acmewholesale.in" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-input" id="loginPassword" value="admin123" required>
+        </div>
+
+        <div style="margin-bottom: 20px; font-size: 12px; color: var(--text-subtle); background: rgba(99, 102, 241, 0.1); padding: 10px; border-radius: 6px; border: 1px solid rgba(99, 102, 241, 0.2);">
+          💡 <strong>Demo Mode:</strong> Pre-filled with Admin credentials. Click below to sign in and access the ledger.
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px;">Sign In to Accounting Ledger</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="appSidebar">
+      <div class="brand-section">
+        <div class="brand-icon">⚖️</div>
+        <div>
+          <div class="brand-title">GST Ledger</div>
+          <div class="brand-tag">Clean-Room Rebuild</div>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <a class="nav-item active" data-tab="dashboard" href="#dashboard">
+          <span class="nav-icon">📊</span>
+          <span>Dashboard</span>
+        </a>
+        <a class="nav-item" data-tab="customers" href="#customers">
+          <span class="nav-icon">👥</span>
+          <span>Customers</span>
+        </a>
+        <a class="nav-item" data-tab="items" href="#items">
+          <span class="nav-icon">📦</span>
+          <span>Items Catalog</span>
+        </a>
+        <a class="nav-item" data-tab="invoices" href="#invoices">
+          <span class="nav-icon">📄</span>
+          <span>Sales Invoices</span>
+        </a>
+        <a class="nav-item" data-tab="payments" href="#payments">
+          <span class="nav-icon">💳</span>
+          <span>Payments Received</span>
+        </a>
+        <a class="nav-item" data-tab="trial-balance" href="#trial-balance">
+          <span class="nav-icon">⚖️</span>
+          <span>Trial Balance Sheet</span>
+        </a>
+        <a class="nav-item" data-tab="gstr1" href="#gstr1">
+          <span class="nav-icon">📑</span>
+          <span>GSTR-1 Tax Return</span>
+        </a>
+        <a class="nav-item" data-tab="journal" href="#journal">
+          <span class="nav-icon">📜</span>
+          <span>Audit Journal Log</span>
+        </a>
+        <a class="nav-item" data-tab="copilot" href="#copilot">
+          <span class="nav-icon">✨</span>
+          <span>AI Copilot</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="org-card">
+          <div class="org-name">Acme Wholesale Traders</div>
+          <div class="org-detail">GSTIN: 27AABCG1234F1Z5</div>
+          <div class="org-detail">Base State: 27-Maharashtra</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Topbar Header -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="btn btn-secondary btn-sm" id="btnToggleMobileSidebar" style="display:none; margin-right:8px;">☰</button>
+          <h1 class="page-title" id="pageTitle">Dashboard Overview</h1>
+          <div class="equilibrium-badge" id="topbarEquilibrium" title="Click to view Trial Balance">
+            <span class="pulse-dot"></span>
+            <span>Verifying Equilibrium...</span>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <button class="btn btn-secondary" id="btnNewPayment">
+            <span>+</span> Record Payment
+          </button>
+          <button class="btn btn-primary" id="btnNewInvoice">
+            <span>+</span> New Invoice
+          </button>
+          <button class="btn btn-ai" id="btnOpenAI" title="Shortcut: Ctrl+K">
+            <span>✨</span> AI Copilot
+          </button>
+          <div class="user-profile-badge" id="userBadge">
+            <span>👤</span>
+            <span id="userBadgeName">ADMIN</span>
+            <button class="btn btn-secondary btn-sm" id="btnLogout" style="padding: 2px 8px; margin-left: 4px;" title="Sign Out">✕</button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Scrollable Views Body -->
+      <div class="page-container">
+        <!-- 1. DASHBOARD VIEW -->
+        <section class="view-section active" id="view-dashboard">
+          <div class="kpi-grid">
+            <div class="kpi-card blue">
+              <div class="kpi-header">
+                <span class="kpi-title">Delivered Revenue (Net)</span>
+                <span class="kpi-icon">📈</span>
+              </div>
+              <div class="kpi-value" id="kpiRevenue">₹0.00</div>
+              <div class="kpi-subtitle"><span>B2B Sales Income posted to GL</span></div>
+            </div>
+
+            <div class="kpi-card amber">
+              <div class="kpi-header">
+                <span class="kpi-title">Accounts Receivable (Due)</span>
+                <span class="kpi-icon">⏳</span>
+              </div>
+              <div class="kpi-value" id="kpiAR">₹0.00</div>
+              <div class="kpi-subtitle"><span>Open customer balances outstanding</span></div>
+            </div>
+
+            <div class="kpi-card emerald">
+              <div class="kpi-header">
+                <span class="kpi-title">Cash & Bank Liquidity</span>
+                <span class="kpi-icon">🏦</span>
+              </div>
+              <div class="kpi-value" id="kpiCashBank">₹0.00</div>
+              <div class="kpi-subtitle"><span>Accounts 1000 (Cash) + 1010 (Bank)</span></div>
+            </div>
+
+            <div class="kpi-card purple">
+              <div class="kpi-header">
+                <span class="kpi-title">GST Tax Liabilities</span>
+                <span class="kpi-icon">🏛️</span>
+              </div>
+              <div class="kpi-value" id="kpiTaxes">₹0.00</div>
+              <div class="kpi-subtitle"><span>Output CGST + SGST + IGST</span></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Recent Invoices & Double-Entry Status</div>
+              <a href="#invoices" class="btn btn-secondary btn-sm">View All Invoices →</a>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Invoice #</th>
+                    <th>Customer Name</th>
+                    <th>Invoice Date</th>
+                    <th class="num">Total Amount</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="recentActivityBody">
+                  <tr><td colspan="6" style="text-align:center; padding: 24px;">Loading transactions...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. CUSTOMERS VIEW -->
+        <section class="view-section" id="view-customers">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Customers Master Directory</div>
+              <button class="btn btn-primary btn-sm" id="btnOpenNewCustomerModal">+ Add Customer</button>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Customer Name</th>
+                    <th>GSTIN</th>
+                    <th>State Code</th>
+                    <th>Place of Supply Type</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                  </tr>
+                </thead>
+                <tbody id="customersTableBody">
+                  <tr><td colspan="6" style="text-align:center; padding: 32px;">Loading customers...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. ITEMS VIEW -->
+        <section class="view-section" id="view-items">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Products & Services Catalog</div>
+              <button class="btn btn-primary btn-sm" id="btnOpenNewItemModal">+ Add Item</button>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Item Name</th>
+                    <th>HSN / SAC Code</th>
+                    <th class="num">Default Unit Price</th>
+                    <th class="num">Standard GST Rate</th>
+                  </tr>
+                </thead>
+                <tbody id="itemsTableBody">
+                  <tr><td colspan="4" style="text-align:center; padding: 32px;">Loading items catalog...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. SALES INVOICES VIEW -->
+        <section class="view-section" id="view-invoices">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">B2B Sales Invoices (State-Aware GST Bifurcation)</div>
+              <button class="btn btn-primary btn-sm" onclick="document.getElementById('modalInvoice').classList.add('active')">+ New Invoice</button>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Invoice #</th>
+                    <th>Customer</th>
+                    <th>Date</th>
+                    <th>Place of Supply</th>
+                    <th class="num">Taxable Subtotal</th>
+                    <th class="num">GST Breakdown & Total</th>
+                    <th class="num">Due Amount</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="invoicesTableBody">
+                  <tr><td colspan="9" style="text-align:center; padding: 32px;">Loading invoices...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5. PAYMENTS RECEIVED VIEW -->
+        <section class="view-section" id="view-payments">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Customer Payment Remittances & AR Relief</div>
+              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalPayment').classList.add('active')">+ Record Payment</button>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Payment #</th>
+                    <th>Customer Name</th>
+                    <th>Date</th>
+                    <th>Deposit Account</th>
+                    <th>Reference / UTR</th>
+                    <th class="num">Remittance Amount</th>
+                  </tr>
+                </thead>
+                <tbody id="paymentsTableBody">
+                  <tr><td colspan="6" style="text-align:center; padding: 32px;">Loading payments...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 6. TRIAL BALANCE VIEW -->
+        <section class="view-section" id="view-trial-balance">
+          <div id="tbEquilibriumBanner" style="padding: 16px 20px; border-radius: var(--radius-md); margin-bottom: 24px; border: 1px solid var(--border-subtle);">
+            Verifying mathematical equilibrium...
+          </div>
+
+          <div class="card">
+            <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
+              <div class="card-title">General Ledger Trial Balance Sheet (Accrual Basis)</div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="font-size: 12px; color: var(--text-muted);">As of Date:</label>
+                <input type="date" class="form-input" id="tbDateFilter" style="width: auto; padding: 5px 8px; font-size: 12px;">
+                <button class="btn btn-secondary btn-sm" id="btnFilterTB">Filter</button>
+                <button class="btn btn-secondary btn-sm" onclick="window.appRefreshTrialBalance && window.appRefreshTrialBalance()">Refresh Balance</button>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Code</th>
+                    <th>Account Name</th>
+                    <th>Type</th>
+                    <th class="num">Total Debit</th>
+                    <th class="num">Total Credit</th>
+                    <th class="num">Net Balance</th>
+                  </tr>
+                </thead>
+                <tbody id="trialBalanceTableBody">
+                  <tr><td colspan="6" style="text-align:center; padding: 32px;">Loading trial balance accounts...</td></tr>
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colspan="3"><strong>GRAND TOTAL EQUILIBRIUM (Σ Debit == Σ Credit)</strong></td>
+                    <td class="num" id="tbTotalDebit">₹0.00</td>
+                    <td class="num" id="tbTotalCredit">₹0.00</td>
+                    <td class="num" style="color: var(--emerald-500); font-weight:700;">BALANCED (0.00)</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 7. GSTR-1 TAX RETURN VIEW -->
+        <section class="view-section" id="view-gstr1">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; background: var(--bg-card); padding: 12px 18px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); flex-wrap: wrap; gap: 10px;">
+            <div style="font-weight: 600; font-size: 13.5px;">Statutory Return Period Filter</div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <label style="font-size: 12px; color: var(--text-muted);">From:</label>
+              <input type="date" class="form-input" id="gstr1FromDate" style="width: auto; padding: 5px 8px; font-size: 12px;">
+              <label style="font-size: 12px; color: var(--text-muted);">To:</label>
+              <input type="date" class="form-input" id="gstr1ToDate" style="width: auto; padding: 5px 8px; font-size: 12px;">
+              <button class="btn btn-primary btn-sm" id="btnFilterGSTR1">Apply Period</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">GSTR-1 Section 4A: B2B Invoices Summary</div>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Customer GSTIN</th>
+                    <th>Trade Name</th>
+                    <th>Invoice #</th>
+                    <th>Date</th>
+                    <th>Place of Supply</th>
+                    <th class="num">Taxable Value</th>
+                    <th class="num">Rate</th>
+                    <th class="num">CGST</th>
+                    <th class="num">SGST</th>
+                    <th class="num">IGST</th>
+                  </tr>
+                </thead>
+                <tbody id="gstr1B2BBody">
+                  <tr><td colspan="10" style="text-align:center; padding: 24px;">Loading B2B returns...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">GSTR-1 Section 12: HSN-Wise Summary of Outward Supplies</div>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>HSN / SAC</th>
+                    <th>Description</th>
+                    <th>UQC</th>
+                    <th class="num">Total Qty</th>
+                    <th class="num">Taxable Value</th>
+                    <th class="num">CGST</th>
+                    <th class="num">SGST</th>
+                    <th class="num">IGST</th>
+                  </tr>
+                </thead>
+                <tbody id="gstr1HSNBody">
+                  <tr><td colspan="8" style="text-align:center; padding: 24px;">Loading HSN summary...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 8. AUDIT JOURNAL LOG VIEW -->
+        <section class="view-section" id="view-journal">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Double-Entry General Ledger Audit Log (Immutable Postings)</div>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Voucher #</th>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Account</th>
+                    <th>Narration</th>
+                    <th class="num">Debit (₹)</th>
+                    <th class="num">Credit (₹)</th>
+                  </tr>
+                </thead>
+                <tbody id="journalTableBody">
+                  <tr><td colspan="7" style="text-align:center; padding: 32px;">Loading journal vouchers...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+ 
+         <!-- 9. AI ACCOUNTING COPILOT FULL VIEW (#copilot) -->
+         <section class="view-section" id="view-copilot">
+           <div class="card" style="display: flex; flex-direction: column; height: calc(100vh - 150px); min-height: 550px;">
+             <div class="card-header">
+               <div style="display:flex; align-items:center; gap: 10px;">
+                 <div class="card-title">✨ AI Accounting Copilot</div>
+                 <span class="badge badge-delivered">Read-Only Grounded Engine</span>
+               </div>
+               <div style="font-size: 12px; color: var(--text-subtle);">
+                 Zero mutation authority • Grounded strictly in live double-entry records
+               </div>
+             </div>
+ 
+             <div style="padding: 12px 18px; background: rgba(99, 102, 241, 0.08); border-bottom: 1px solid rgba(99, 102, 241, 0.2); font-size: 12.5px; color: #c7d2fe; display: flex; align-items: center; gap: 10px;">
+               <span>🛡️</span>
+               <span><strong>Financial Safety Guarantee:</strong> The Copilot has ZERO mutation permissions. Every response cites verified source documents (<code>invoice:*</code>, <code>gst_split:*</code>, <code>trial_balance:*</code>). Attempted write operations are rejected immediately with 0 database changes.</span>
+             </div>
+ 
+             <!-- Full-Page Chat Container -->
+             <div class="ai-chat-thread" id="aiPageChatThread" style="flex: 1; padding: 20px; overflow-y: auto;">
+               <!-- Chat messages inserted dynamically -->
+             </div>
+ 
+             <div class="ai-suggestions" style="padding: 12px 20px; border-top: 1px solid var(--border-subtle);">
+               <div class="suggestion-label" style="font-size: 11px; text-transform: uppercase; color: var(--text-subtle); margin-bottom: 8px;">Recommended Inquiries:</div>
+               <div class="suggestion-chips" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                 <button class="suggestion-chip page-chip" data-question="Why is invoice INV-0001 amount ₹11,800?">Why is invoice INV-0001 ₹11,800?</button>
+                 <button class="suggestion-chip page-chip" data-question="Does my trial balance balance right now?">Does my trial balance balance?</button>
+                 <button class="suggestion-chip page-chip" data-question="How much CGST and SGST did I collect today?">How much GST did I collect?</button>
+                 <button class="suggestion-chip page-chip" data-question="Show me all unpaid invoices with customer breakdown.">Show unpaid invoices</button>
+               </div>
+             </div>
+ 
+             <div style="padding: 16px 20px; border-top: 1px solid var(--border-subtle); display: flex; gap: 12px;">
+               <input type="text" class="ai-input" id="aiPageInput" placeholder="Ask questions about invoices, GST calculations, or ledger equilibrium..." style="flex: 1;" autocomplete="off">
+               <button class="btn btn-primary" id="btnSendPageAI" style="padding: 10px 24px;">Ask Copilot</button>
+             </div>
+           </div>
+         </section>
+       </div>
+    </main>
+  </div>
+
+  <!-- AI Copilot Slide-over Drawer -->
+  <div class="ai-drawer-overlay" id="aiDrawerOverlay"></div>
+  <aside class="ai-drawer" id="aiDrawer">
+    <div class="ai-drawer-header">
+      <div class="ai-drawer-title">
+        <span>✨</span> AI Accounting Copilot
+        <span class="ai-status-pill">Read-Only</span>
+      </div>
+      <button class="btn-close" id="btnCloseAI">&times;</button>
+    </div>
+
+    <div class="ai-security-banner">
+      <span>🛡️</span>
+      <span><strong>Strict Read-Only Boundary:</strong> The Copilot cannot alter invoices, post journal entries, or mutate ledger balances. Grounded strictly in live accounting records.</span>
+    </div>
+
+    <div class="ai-chat-thread" id="aiChatThread">
+      <!-- Chat messages inserted dynamically -->
+    </div>
+
+    <div class="ai-suggestions">
+      <div class="suggestion-label">Quick Financial Questions:</div>
+      <div class="suggestion-chips">
+        <button class="suggestion-chip" data-question="Why is invoice INV-0001 amount ₹11,800?">Why is invoice INV-0001 ₹11,800?</button>
+        <button class="suggestion-chip" data-question="Does my trial balance balance right now?">Does my trial balance balance?</button>
+        <button class="suggestion-chip" data-question="How much CGST and SGST did I collect today?">How much GST did I collect?</button>
+        <button class="suggestion-chip" data-question="Show me all unpaid invoices.">Show unpaid invoices</button>
+      </div>
+    </div>
+
+    <div class="ai-input-area">
+      <input type="text" class="ai-input" id="aiInput" placeholder="Ask about invoices, GST splits, trial balance..." autocomplete="off">
+      <button class="btn btn-primary" id="btnSendAI">Send</button>
+    </div>
+  </aside>
+
+  <!-- MODAL: CREATE SALES INVOICE -->
+  <div class="modal-overlay" id="modalInvoice">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 class="modal-title">Create B2B Sales Invoice</h2>
+        <button class="btn-close btn-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group" style="flex: 2;">
+            <label class="form-label">Customer (Debtor)</label>
+            <select class="form-select" id="invoiceCustomerSelect">
+              <option value="">-- Choose Customer --</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label">Invoice Date</label>
+            <input type="date" class="form-input" id="invoiceDateInput">
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label">Place of Supply Rule</label>
+            <div id="placeOfSupplyBadge" class="badge badge-delivered" style="padding: 10px; width: 100%; text-align: center;">
+              Intra-State (50/50 Split)
+            </div>
+          </div>
+        </div>
+
+        <div style="margin: 16px 0 10px; display: flex; justify-content: space-between; align-items: center;">
+          <label class="form-label" style="margin:0;">Invoice Line Items (HSN & Dual-Split Tax)</label>
+          <button type="button" class="btn btn-secondary btn-sm" id="btnAddLineItem">+ Add Item</button>
+        </div>
+
+        <div id="invoiceLinesContainer">
+          <!-- Dynamic Line Item rows -->
+        </div>
+
+        <!-- Estimated Display Preview -->
+        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 14px; margin-top: 16px;">
+          <div style="font-size: 11px; text-transform: uppercase; color: var(--text-subtle); font-weight: 600; margin-bottom: 8px;">
+            Display Preview (Final taxes posted by backend engine upon delivery)
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
+            <span style="color: var(--text-muted);">Taxable Subtotal:</span>
+            <strong id="previewSubtotal">₹0.00</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
+            <span style="color: var(--text-muted);">Central GST (CGST 50%):</span>
+            <span id="previewCGST">₹0.00</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
+            <span style="color: var(--text-muted);">State GST (SGST 50%):</span>
+            <span id="previewSGST">₹0.00</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;">
+            <span style="color: var(--text-muted);">Integrated GST (IGST 100%):</span>
+            <span id="previewIGST">₹0.00</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; border-top: 1px solid var(--border-subtle); padding-top: 8px;">
+            <span>Grand Total:</span>
+            <span id="previewTotal" style="color: var(--emerald-500);">₹0.00</span>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 16px;">
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+            <input type="checkbox" id="invoiceDeliverCheck" checked>
+            <span>Deliver immediately & post balanced Double-Entry GL vouchers</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-modal-close">Cancel</button>
+        <button class="btn btn-primary" id="btnSubmitInvoice">Issue & Post Invoice</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: VOID INVOICE (IMMUTABLE REVERSAL) -->
+  <div class="modal-overlay" id="modalVoid">
+    <div class="modal-dialog" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2 class="modal-title" style="color: var(--rose-500);">Void Invoice (Immutable Reversal)</h2>
+        <button class="btn-close btn-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom: 14px;">
+          You are voiding invoice <strong id="voidInvoiceNum">INV-0001</strong>.
+        </div>
+        <div style="background: rgba(244, 63, 94, 0.1); border: 1px solid rgba(244, 63, 94, 0.3); border-radius: var(--radius-sm); padding: 12px; font-size: 12px; color: #fecdd3; margin-bottom: 16px;">
+          <strong>Zero Audit Trail Destruction:</strong> In accordance with Indian Companies Act Section 128 and GAP-03, historical journal lines will <em>NOT</em> be deleted. The system will post an explicit reversing journal voucher (entry_type = 'REVERSAL') to neutralize the ledger.
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cancellation Reason</label>
+          <input type="text" class="form-input" id="voidReasonInput" value="Customer cancellation / billing discrepancy">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-modal-close">Cancel</button>
+        <button class="btn btn-danger" id="btnConfirmVoid">Confirm Immutable Reversal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: RECORD PAYMENT -->
+  <div class="modal-overlay" id="modalPayment">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 class="modal-title">Record Customer Remittance</h2>
+        <button class="btn-close btn-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label">Customer</label>
+            <select class="form-select" id="payCustomerSelect">
+              <option value="">-- Choose Customer --</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label">Payment Date</label>
+            <input type="date" class="form-input" id="paymentDateInput">
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label">Deposit Asset Account</label>
+            <select class="form-select" id="payDepositSelect">
+              <!-- Dynamically populated with Cash/Bank accounts -->
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Remittance Amount (₹)</label>
+            <input type="number" class="form-input" id="payAmountInput" placeholder="0.00" min="0.01" step="0.01">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Reference / UTR #</label>
+            <input type="text" class="form-input" id="payRefInput" placeholder="e.g. NEFT-8947192">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Allocate Payment to Open Invoices</label>
+          <div id="payAllocationsContainer" style="max-height: 200px; overflow-y: auto;">
+            <div style="color:var(--text-subtle); padding: 8px;">Select a customer to view open invoices.</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-modal-close">Cancel</button>
+        <button class="btn btn-primary" id="btnSubmitPayment">Record Payment & Relieve AR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD CUSTOMER -->
+  <div class="modal-overlay" id="modalCustomer">
+    <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-header">
+        <h2 class="modal-title">Add New Customer</h2>
+        <button class="btn-close btn-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Customer / Trade Name</label>
+          <input type="text" class="form-input" id="newCustName" placeholder="e.g. Pune Tech Distributors" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">State Code (Place of Supply)</label>
+            <select class="form-select" id="newCustState">
+              <option value="27">27 - Maharashtra (Intra-State)</option>
+              <option value="24">24 - Gujarat (Inter-State)</option>
+              <option value="07">07 - Delhi (Inter-State)</option>
+              <option value="29">29 - Karnataka (Inter-State)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Customer GSTIN</label>
+            <input type="text" class="form-input" id="newCustGSTIN" placeholder="e.g. 27AAPCP1234F1Z8">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" class="form-input" id="newCustEmail" placeholder="billing@customer.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone Number</label>
+            <input type="text" class="form-input" id="newCustPhone" placeholder="+91 98765 43210">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-modal-close">Cancel</button>
+        <button class="btn btn-primary" id="btnSubmitNewCustomer">Save Customer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD ITEM -->
+  <div class="modal-overlay" id="modalItem">
+    <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-header">
+        <h2 class="modal-title">Add New Product / Service</h2>
+        <button class="btn-close btn-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Item / Product Name</label>
+          <input type="text" class="form-input" id="newItemName" placeholder="e.g. ThinkPad E14 Laptop" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Statutory HSN / SAC Code</label>
+            <input type="text" class="form-input" id="newItemHSN" placeholder="e.g. 8471" value="8471" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">GST Tax Rate Slab</label>
+            <select class="form-select" id="newItemTaxRate">
+              <option value="18">18% (Standard Goods)</option>
+              <option value="12">12%</option>
+              <option value="5">5%</option>
+              <option value="28">28% (Luxury / De-merit)</option>
+              <option value="0">0% (Nil Rated)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Standard Selling Price (₹)</label>
+          <input type="number" class="form-input" id="newItemPrice" placeholder="50000.00" min="0" step="0.01" required>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-modal-close">Cancel</button>
+        <button class="btn btn-primary" id="btnSubmitNewItem">Save Catalog Item</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: GENERIC CONFIRMATION DIALOG -->
+  <div class="modal-overlay" id="modalConfirm">
+    <div class="modal-dialog" style="max-width: 440px;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="confirmModalTitle">Please Confirm</h2>
+        <button class="btn-close btn-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmModalMessage" style="font-size: 13.5px; color: var(--text-main); margin-bottom: 10px;">Are you sure you want to proceed?</p>
+        <div id="confirmModalNote" style="display:none; padding: 10px; background: rgba(244, 63, 94, 0.1); border-radius: 6px; border: 1px solid rgba(244, 63, 94, 0.3); font-size: 12px; color: #fecdd3;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-modal-close">Cancel</button>
+        <button class="btn btn-primary" id="btnConfirmAction">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Application Logic Scripts -->
+  <script src="api.js"></script>
+  <script src="components.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

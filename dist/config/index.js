@@ -13,5 +13,9 @@ exports.config = {
     databasePath: process.env.DATABASE_PATH || path_1.default.join(__dirname, '../../gst_ledger.db'),
     baseCurrency: process.env.BASE_CURRENCY || 'INR',
     defaultStateCode: process.env.DEFAULT_STATE_CODE || '27',
-    env: process.env.NODE_ENV || 'development'
+    env: process.env.NODE_ENV || 'development',
+    aiEnabled: process.env.AI_ENABLED === 'true',
+    aiProvider: process.env.AI_PROVIDER || 'gemini',
+    aiApiKey: process.env.AI_API_KEY || '',
+    aiModel: process.env.AI_MODEL || 'gemini-1.5-flash'
 };
